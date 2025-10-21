@@ -1,12 +1,14 @@
 
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import json
 
 # Page configuration
 st.set_page_config(
     page_title="KELP Kit Builder",
-    page_icon="",
+    page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -25,6 +27,13 @@ st.markdown("""
         color: #4472C4;
         margin-bottom: 2rem;
     }
+    .module-card {
+        background-color: #E2EFDA;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #4472C4;
+        margin-bottom: 1rem;
+    }
     .cost-summary {
         background-color: #D9E1F2;
         padding: 1.5rem;
@@ -38,6 +47,13 @@ st.markdown("""
         border-radius: 8px;
         border: 2px solid #F4B183;
         font-family: 'Courier New', monospace;
+    }
+    .warning-box {
+        background-color: #FCE4D6;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #FF0000;
+        margin: 1rem 0;
     }
     .sharing-info {
         background-color: #E2F0D9;
@@ -57,108 +73,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Initialize session state
-if 'reset_counter' not in st.session_state:
-    st.session_state.reset_counter = 0
 if 'order_number' not in st.session_state:
     st.session_state.order_number = f"2025-{datetime.now().strftime('%m%d')}-001"
+if 'modules_selected' not in st.session_state:
+    st.session_state.modules_selected = {'base': True}
 if 'order_history' not in st.session_state:
     st.session_state.order_history = []
 
-# Generate unique key based on reset counter
-def get_key(base_key):
-    return f"{base_key}_{st.session_state.reset_counter}"
-
-def generate_formatted_picklist(order_info, pick_list_items, special_notes, cost_info):
-    """Generate professional formatted text document"""
-    doc = []
-    
-    # Header
-    doc.append("=" * 80)
-    doc.append("KETOS ENVIRONMENTAL LABORATORY")
-    doc.append("SAMPLING KIT - PICK LIST")
-    doc.append("ISO/IEC 17025:2017 Accredited | TNI Certified")
-    doc.append("=" * 80)
-    doc.append("")
-    
-    # Order Information
-    doc.append("ORDER INFORMATION")
-    doc.append("-" * 80)
-    doc.append(f"Order Number:     {order_info['order_number']}")
-    doc.append(f"Customer:         {order_info['customer']}")
-    doc.append(f"Project:          {order_info['project']}")
-    doc.append(f"Date:             {datetime.now().strftime('%B %d, %Y')}")
-    doc.append(f"Time:             {datetime.now().strftime('%I:%M %p')}")
-    doc.append(f"Technician:       ____________________")
-    doc.append("")
-    doc.append(f"Tests Ordered:    {order_info['tests']}")
-    doc.append("")
-    
-    # Components Section
-    doc.append("=" * 80)
-    doc.append("COMPONENTS TO PICK")
-    doc.append("=" * 80)
-    doc.append("")
-    doc.append(f"{'':3} {'Item Description':<50} {'Qty':>5} {'P/N':<15} {'Location':<10}")
-    doc.append("-" * 80)
-    
-    for item in pick_list_items:
-        item_desc = item['item']
-        if len(item_desc) > 48:
-            item_desc = item_desc[:48] + ".."
-        
-        doc.append(f"[ ] {item_desc:<50} {item['qty']:>5} {item['pn']:<15} {item['location']:<10}")
-    
-    doc.append("")
-    
-    # Special Instructions
-    if special_notes:
-        doc.append("=" * 80)
-        doc.append("⚠️  SPECIAL INSTRUCTIONS - READ CAREFULLY")
-        doc.append("=" * 80)
-        for note in special_notes:
-            # Wrap long notes
-            words = note.split()
-            line = ""
-            for word in words:
-                if len(line + word) > 76:
-                    doc.append(f"  • {line}")
-                    line = word + " "
-                else:
-                    line += word + " "
-            if line:
-                doc.append(f"  • {line.strip()}")
-        doc.append("")
-    
-    # Assembly Information
-    doc.append("=" * 80)
-    doc.append("ASSEMBLY INFORMATION")
-    doc.append("=" * 80)
-    doc.append(f"Total Items:          {len(pick_list_items)}")
-    doc.append(f"Assembly Time:        ~7 minutes")
-    doc.append(f"Shipping Method:      {order_info['shipping']}")
-    doc.append(f"Customer Price:       ${cost_info['customer_price']:.2f}")
-    doc.append("")
-    
-    # Quality Control Section
-    doc.append("=" * 80)
-    doc.append("QUALITY CONTROL - SIGNATURES REQUIRED")
-    doc.append("=" * 80)
-    doc.append("")
-    doc.append("Assembled By:  ______________________    Date: __________  Time: __________")
-    doc.append("")
-    doc.append("QC Reviewed:   ______________________    Date: __________  Initials: ______")
-    doc.append("")
-    doc.append("")
-    
-    # Footer
-    doc.append("=" * 80)
-    doc.append(f"Document Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    doc.append("KELP-SOP-KIT-001 | For Internal Laboratory Use Only")
-    doc.append("=" * 80)
-    
-    return "\n".join(doc)
-
-# Component database
+# Component database - CORRECTED: pH/Conductivity removed, sample sharing logic added
 COMPONENT_LIBRARY = {
     'base': {
         'name': 'BASE COMPONENTS',
@@ -179,38 +101,39 @@ COMPONENT_LIBRARY = {
         'description': 'Alkalinity, Hardness, Turbidity, TDS',
         'cost': 2.50,
         'items': [
-            {'item': '250mL HDPE bottle (general chemistry)', 'qty': 1, 'cost': 2.50, 'pn': 'Bottle_GenChem', 'location': 'Shelf B1'},
+            {'item': '250mL HDPE bottle (general chemistry)', 'qty': 1, 'cost': 2.50, 'pn': 'Bottle_01', 'location': 'Shelf B1'},
         ],
         'color': '#4472C4',
         'tests': ['Alkalinity', 'Total Hardness', 'Calcium Hardness', 'Turbidity', 'TDS'],
-        'preservation': 'NONE',
-        'can_share_with': ['module_c'],
-        'note': 'No acid preservation - compatible with anions'
+        'preservation': 'None (no acid)',
+        'can_share': True,
+        'shares_with': 'Module C (Anions)'
     },
     'module_b': {
         'name': 'MODULE B: Metals (EPA 200.8)',
         'description': 'Lead, Copper, Arsenic, Chromium, Zinc, Iron, Manganese',
         'cost': 5.00,
         'items': [
-            {'item': '250mL HDPE bottle (trace-metal clean)', 'qty': 1, 'cost': 3.50, 'pn': 'Bottle_02', 'location': 'Shelf B2'},
-            {'item': 'HNO3 preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_HNO3', 'location': 'Shelf D1'},
+            {'item': '250mL HDPE bottle (trace-metal)', 'qty': 1, 'cost': 3.50, 'pn': 'Bottle_02', 'location': 'Shelf B2'},
+            {'item': 'HNO₃ preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_HNO3', 'location': 'Shelf D1'},
         ],
         'color': '#70AD47',
         'tests': ['Lead (Pb)', 'Copper (Cu)', 'Arsenic (As)', 'Chromium (Cr)', 'Zinc (Zn)', 'Iron (Fe)', 'Manganese (Mn)', 'Other trace metals'],
-        'preservation': 'HNO3 to pH <2',
-        'can_share_with': [],
-        'note': 'Requires HNO3 preservation - SEPARATE bottle required'
+        'preservation': 'HNO₃ to pH <2',
+        'can_share': False
     },
     'module_c': {
         'name': 'MODULE C: Anions (EPA 300.1)',
         'description': 'Chloride, Sulfate, Nitrate, Fluoride',
-        'cost': 0.00,
-        'items': [],
+        'cost': 1.50,
+        'items': [
+            {'item': '250mL PP bottle (anions)', 'qty': 1, 'cost': 1.50, 'pn': 'Bottle_03', 'location': 'Shelf B3'},
+        ],
         'color': '#FFC000',
-        'tests': ['Chloride (Cl-)', 'Sulfate (SO4 2-)', 'Nitrate (NO3-)', 'Fluoride (F-)'],
-        'preservation': 'NONE',
-        'can_share_with': ['module_a'],
-        'note': 'No acid preservation - can SHARE bottle with Module A'
+        'tests': ['Chloride (Cl⁻)', 'Sulfate (SO₄²⁻)', 'Nitrate (NO₃⁻)', 'Fluoride (F⁻)'],
+        'preservation': 'None (no acid)',
+        'can_share': True,
+        'shares_with': 'Module A (Gen Chem)'
     },
     'module_d': {
         'name': 'MODULE D: Nutrients',
@@ -218,13 +141,12 @@ COMPONENT_LIBRARY = {
         'cost': 4.00,
         'items': [
             {'item': '500mL PP bottle (nutrients)', 'qty': 1, 'cost': 2.50, 'pn': 'Bottle_04', 'location': 'Shelf B4'},
-            {'item': 'H2SO4 preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_H2SO4', 'location': 'Shelf D2'},
+            {'item': 'H₂SO₄ preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_H2SO4', 'location': 'Shelf D2'},
         ],
         'color': '#5B9BD5',
-        'tests': ['Ammonia (NH3)', 'Total Kjeldahl Nitrogen (TKN)', 'Nitrite (NO2-)', 'Phosphate (PO4 3-)'],
-        'preservation': 'H2SO4 to pH <2',
-        'can_share_with': [],
-        'note': 'Requires H2SO4 preservation - SEPARATE bottle required'
+        'tests': ['Ammonia (NH₃)', 'Total Kjeldahl Nitrogen (TKN)', 'Nitrite (NO₂⁻)', 'Phosphate (PO₄³⁻)'],
+        'preservation': 'H₂SO₄ to pH <2',
+        'can_share': False
     },
     'module_p': {
         'name': 'MODULE P: PFAS (EPA 537.1 / 1633)',
@@ -238,10 +160,9 @@ COMPONENT_LIBRARY = {
         ],
         'color': '#E7E6E6',
         'tests': ['PFAS-3', 'PFAS-14', 'PFAS-18', 'PFAS-25', 'PFAS-40'],
-        'special_warning': 'PFAS KIT - Use ONLY PFAS-free materials! NO standard foam, NO fluorinated materials!',
-        'preservation': 'NONE (but requires PFAS-free containers)',
-        'can_share_with': [],
-        'note': 'PFAS-free containers required - CANNOT share'
+        'special_warning': '⚠️ PFAS KIT - Use ONLY PFAS-free materials! NO standard foam, NO fluorinated materials!',
+        'preservation': 'None (PFAS-free containers)',
+        'can_share': False
     },
     'module_m': {
         'name': 'MODULE M: Microbiology',
@@ -253,9 +174,8 @@ COMPONENT_LIBRARY = {
         ],
         'color': '#A5A5A5',
         'tests': ['Total Coliform', 'E. coli', 'Fecal Coliform'],
-        'preservation': 'Sodium thiosulfate (for dechlorination)',
-        'can_share_with': [],
-        'note': 'Sterile bottle required - CANNOT share'
+        'preservation': 'Sodium thiosulfate',
+        'can_share': False
     },
 }
 
@@ -278,42 +198,42 @@ SHIPPING_OPTIONS = {
     }
 }
 
-LABOR_COST = 7.46
+LABOR_COST = 7.46  # 7 minutes at $63.94/hour
 
 # Header
-st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder v2.2</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Intelligent sample sharing • Zero redundancy • EPA compliant</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Configure custom sampling kits with zero redundancy • Smart sample sharing</div>', unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar - Order Information
 with st.sidebar:
     st.header("📋 Order Information")
-    order_number = st.text_input("Order Number", value=st.session_state.order_number, key=get_key("order_num"))
-    customer_name = st.text_input("Customer Name", placeholder="ABC Water District", key=get_key("customer"))
-    project_name = st.text_input("Project Name", placeholder="Monthly Monitoring", key=get_key("project"))
+    order_number = st.text_input("Order Number", value=st.session_state.order_number)
+    customer_name = st.text_input("Customer Name", placeholder="ABC Water District")
+    project_name = st.text_input("Project Name", placeholder="Monthly Monitoring")
     
     st.divider()
     
     st.header("⚙️ Settings")
     markup_factor = st.slider("Markup Factor", min_value=1.0, max_value=2.0, value=1.4, step=0.05, 
-                               help="Multiplier applied to cost to determine customer price", key=get_key("markup"))
-    show_costs = st.checkbox("Show Internal Costs", value=True, help="Display cost breakdown (internal use)", key=get_key("show_costs"))
+                               help="Multiplier applied to cost to determine customer price")
+    show_costs = st.checkbox("Show Internal Costs", value=True, help="Display cost breakdown (internal use)")
     
     st.divider()
     
-    if st.button("🔄 Reset Configuration", type="secondary", key=get_key("reset_btn")):
-        st.session_state.reset_counter += 1
+    if st.button("🔄 Reset Configuration", type="secondary"):
+        st.session_state.modules_selected = {'base': True}
         st.rerun()
 
-# Main content
+# Main content area - Two columns
 col1, col2 = st.columns([2, 1])
 
 with col1:
     st.header("1️⃣ Select Test Modules")
-    st.markdown("*Choose the analytical tests your customer needs. The system automatically optimizes bottle usage.*")
+    st.markdown("*Choose the analytical tests your customer needs. The system will automatically optimize bottle usage.*")
     
+    # Module selection with expandable details
     modules_to_show = ['module_a', 'module_b', 'module_c', 'module_d', 'module_p', 'module_m']
     
-    selected_modules = []
     for module_key in modules_to_show:
         module = COMPONENT_LIBRARY[module_key]
         
@@ -323,12 +243,11 @@ with col1:
             with col_check:
                 selected = st.checkbox(
                     "Select",
-                    value=False,
-                    key=get_key(f"check_{module_key}"),
+                    value=st.session_state.modules_selected.get(module_key, False),
+                    key=f"check_{module_key}",
                     label_visibility="collapsed"
                 )
-                if selected:
-                    selected_modules.append(module_key)
+                st.session_state.modules_selected[module_key] = selected
             
             with col_info:
                 st.markdown(f"**Tests Included:** {module['description']}")
@@ -336,75 +255,63 @@ with col1:
                     tests_str = ", ".join(module['tests'])
                     st.caption(f"📊 {tests_str}")
                 
-                st.caption(f"🧪 **Preservation:** {module.get('preservation', 'N/A')}")
+                if 'preservation' in module:
+                    st.caption(f"🧪 **Preservation:** {module['preservation']}")
                 
-                if 'can_share_with' in module and module['can_share_with']:
-                    share_names = [COMPONENT_LIBRARY[m]['name'] for m in module['can_share_with']]
-                    st.success(f"✅ Can share bottle with: {', '.join(share_names)}")
+                if module.get('can_share', False):
+                    st.success(f"✅ Can share bottle with {module.get('shares_with', 'other modules')}")
                 
                 if selected and 'special_warning' in module:
                     st.warning(module['special_warning'])
     
     st.divider()
     
+    # Shipping selection
     st.header("2️⃣ Select Shipping Option")
     
     col_std, col_comp = st.columns(2)
     
-    compliance_shipping = st.session_state.get('compliance_shipping', False)
-    
     with col_std:
-        if st.button("📦 Standard Shipping - $8.00", key=get_key("ship_standard"), 
-                     type="primary" if not compliance_shipping else "secondary",
+        if st.button("📦 Standard Shipping - $8.00", key="ship_standard", 
+                     type="secondary" if st.session_state.modules_selected.get('compliance_shipping', False) else "primary",
                      use_container_width=True):
-            st.session_state.compliance_shipping = False
-            compliance_shipping = False
+            st.session_state.modules_selected['compliance_shipping'] = False
         st.caption("USPS/FedEx Ground (3-5 days)")
+        st.caption("✓ Research/non-compliance samples")
     
     with col_comp:
-        if st.button("❄️ Compliance Shipping - $50.00", key=get_key("ship_compliance"),
-                     type="primary" if compliance_shipping else "secondary",
+        if st.button("❄️ Compliance Shipping - $50.00", key="ship_compliance",
+                     type="primary" if st.session_state.modules_selected.get('compliance_shipping', False) else "secondary",
                      use_container_width=True):
-            st.session_state.compliance_shipping = True
-            compliance_shipping = True
+            st.session_state.modules_selected['compliance_shipping'] = True
         st.caption("FedEx 2-Day with cooler & ice")
+        st.caption("✓ Regulatory/compliance samples")
 
 with col2:
     st.header("💰 Cost Summary")
     
-    # Calculate costs with sharing logic
+    # Calculate costs WITH SAMPLE SHARING LOGIC
     material_cost = COMPONENT_LIBRARY['base']['cost']
-    bottles_count = 0
-    preservatives_count = 0
+    selected_modules = []
     
-    sharing_a_c = ('module_a' in selected_modules and 'module_c' in selected_modules)
+    # Check if A and C are both selected (sample sharing case)
+    sharing_a_c = (st.session_state.modules_selected.get('module_a', False) and 
+                   st.session_state.modules_selected.get('module_c', False))
     
-    for module_key in selected_modules:
-        module = COMPONENT_LIBRARY[module_key]
-        
-        if module_key == 'module_c' and sharing_a_c:
-            continue
-        elif module_key == 'module_c' and not sharing_a_c:
-            material_cost += 1.50
-            bottles_count += 1
-        else:
-            material_cost += module['cost']
+    # Add selected modules
+    for module_key in modules_to_show:
+        if st.session_state.modules_selected.get(module_key, False):
+            selected_modules.append(module_key)
             
-            if module_key == 'module_a':
-                bottles_count += 1
-            elif module_key == 'module_b':
-                bottles_count += 1
-                preservatives_count += 1
-            elif module_key == 'module_d':
-                bottles_count += 1
-                preservatives_count += 1
-            elif module_key == 'module_p':
-                bottles_count += 2
-            elif module_key == 'module_m':
-                bottles_count += 1
-                preservatives_count += 1
+            # Special handling for Module C when sharing with A
+            if module_key == 'module_c' and sharing_a_c:
+                # Don't add Module C cost if sharing with A
+                continue
+            else:
+                material_cost += COMPONENT_LIBRARY[module_key]['cost']
     
-    if compliance_shipping:
+    # Add shipping
+    if st.session_state.modules_selected.get('compliance_shipping', False):
         shipping_cost = SHIPPING_OPTIONS['compliance']['cost']
         shipping_type = 'Compliance'
     else:
@@ -416,6 +323,7 @@ with col2:
     margin = customer_price - total_cost
     margin_pct = (margin / customer_price) * 100 if customer_price > 0 else 0
     
+    # Display summary
     st.markdown(f"""
     <div class="cost-summary">
         <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">Modules Selected: {len(selected_modules)}</div>
@@ -440,7 +348,7 @@ with col2:
                 <span style="font-weight: bold;">${shipping_cost:.2f}</span>
             </div>
             <div style="display: flex; justify-content: space-between; padding-top: 0.5rem; border-top: 1px solid #ccc;">
-                <span style="font-weight: bold;">Total Cost:</span>
+                <span style="font-weight: bold;">Total Cost to KELP:</span>
                 <span style="font-weight: bold; color: #1F4E78;">${total_cost:.2f}</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; color: #70AD47;">
@@ -453,110 +361,184 @@ with col2:
     else:
         st.markdown("</div>", unsafe_allow_html=True)
     
+    # Show smart sharing notification
     if sharing_a_c:
         st.markdown("""
         <div class="sharing-info">
-            <strong>✅ SMART SHARING:</strong><br>
+            <strong>✅ SMART SHARING ENABLED</strong><br>
             General Chemistry + Anions share 1 bottle<br>
             <em>Savings: $1.50 + 1 bottle</em>
         </div>
         """, unsafe_allow_html=True)
     
+    # Visual indicator
     st.divider()
     st.subheader("📦 Kit Contents")
+    
+    # Calculate bottles with sharing logic
+    bottles_count = 0
+    if st.session_state.modules_selected.get('module_a', False):
+        bottles_count += 1
+    if st.session_state.modules_selected.get('module_b', False):
+        bottles_count += 1
+    if st.session_state.modules_selected.get('module_c', False) and not sharing_a_c:
+        bottles_count += 1  # Only add if NOT sharing with A
+    if st.session_state.modules_selected.get('module_d', False):
+        bottles_count += 1
+    if st.session_state.modules_selected.get('module_p', False):
+        bottles_count += 2  # PFAS needs 2 bottles
+    if st.session_state.modules_selected.get('module_m', False):
+        bottles_count += 1
+    
     st.metric("Sample Bottles", bottles_count)
-    st.metric("Preservatives", preservatives_count)
-    st.metric("Temp Control", "Yes ❄️" if compliance_shipping else "No")
+    st.metric("Preservative Vials", 
+              (1 if st.session_state.modules_selected.get('module_b', False) else 0) + 
+              (1 if st.session_state.modules_selected.get('module_d', False) else 0) +
+              (1 if st.session_state.modules_selected.get('module_m', False) else 0))
+    
+    has_ice = st.session_state.modules_selected.get('compliance_shipping', False)
+    st.metric("Temperature Control", "Yes ❄️" if has_ice else "No")
 
-# Pick List
+# Pick List Section
 st.divider()
-st.header("📝 PICK LIST")
+st.header("📝 PICK LIST - For Lab Technician")
 
 if len(selected_modules) > 0:
+    
+    # Generate pick list with SMART SHARING
     pick_list_items = []
     special_notes = []
     
+    # Always include base
     for item in COMPONENT_LIBRARY['base']['items']:
-        if 'Gloves' in item['item'] and 'module_p' in selected_modules:
-            continue
+        # Check if PFAS is selected - skip standard gloves
+        if 'Gloves' in item['item'] and st.session_state.modules_selected.get('module_p', False):
+            continue  # Skip standard gloves, PFAS module adds PFAS-free gloves
         pick_list_items.append(item)
     
+    # Add selected module components with SHARING LOGIC
     for module_key in selected_modules:
         module = COMPONENT_LIBRARY[module_key]
         
-        if module_key == 'module_c':
-            if sharing_a_c:
-                special_notes.append("Anions (NO3, Cl, SO4, F) share bottle with General Chemistry (no acid preservation)")
-                continue
-            else:
-                pick_list_items.append({
-                    'item': '250mL PP bottle (anions)', 
-                    'qty': 1, 
-                    'cost': 1.50, 
-                    'pn': 'Bottle_03', 
-                    'location': 'Shelf B3'
-                })
-        else:
-            for item in module['items']:
-                pick_list_items.append(item)
+        # Special handling for Module C when sharing with Module A
+        if module_key == 'module_c' and sharing_a_c:
+            # Don't add Module C bottle - it shares with Module A
+            special_notes.append("✅ Anions (Cl⁻, SO₄²⁻, NO₃⁻, F⁻) will use SAME 250mL bottle as General Chemistry (no acid preservation required)")
+            continue
         
+        # Add all items from the module
+        for item in module['items']:
+            pick_list_items.append(item)
+        
+        # Add special warnings
         if 'special_warning' in module:
             special_notes.append(module['special_warning'])
     
-    shipping_key = 'compliance' if compliance_shipping else 'standard'
+    # Add shipping items
+    shipping_key = 'compliance' if st.session_state.modules_selected.get('compliance_shipping', False) else 'standard'
     for item in SHIPPING_OPTIONS[shipping_key].get('items', []):
         pick_list_items.append(item)
     
-    # Display preview
-    st.markdown(f"""
-    <div class="pick-list">
-    <strong>ORDER:</strong> {order_number} | <strong>CUSTOMER:</strong> {customer_name if customer_name else 'N/A'}<br>
-    <strong>TESTS:</strong> {', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules])}<br><br>
-    <strong>COMPONENTS:</strong><br>
-    """, unsafe_allow_html=True)
+    # Display pick list
+    col_print, col_download = st.columns([3, 1])
     
-    for item in pick_list_items:
-        st.markdown(f"☐ {item['item']} × {item['qty']} [{item['location']}]<br>", unsafe_allow_html=True)
+    with col_print:
+        st.markdown(f"""
+        <div class="pick-list">
+        <div style="font-weight: bold; font-size: 1.2rem; margin-bottom: 1rem; border-bottom: 2px solid #F4B183; padding-bottom: 0.5rem;">
+        📋 PICK LIST
+        </div>
+        <div style="margin-bottom: 1rem;">
+            <strong>ORDER #:</strong> {order_number}<br>
+            <strong>CUSTOMER:</strong> {customer_name if customer_name else '[Not specified]'}<br>
+            <strong>PROJECT:</strong> {project_name if project_name else '[Not specified]'}<br>
+            <strong>DATE:</strong> {datetime.now().strftime('%B %d, %Y - %I:%M %p')}<br>
+            <strong>TESTS ORDERED:</strong> {', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules])}
+        </div>
+        <div style="background-color: white; padding: 1rem; border-radius: 5px; margin: 1rem 0;">
+        <strong>PICK THE FOLLOWING ITEMS:</strong><br>
+        """, unsafe_allow_html=True)
+    
+    for idx, item in enumerate(pick_list_items, start=1):
+        item_line = f"☐ {item['item']}"
+        if item['qty'] > 1:
+            item_line += f" × {item['qty']}"
+        item_line += f" [{item['location']}]"
+        
+        st.markdown(f"<div style='margin: 0.3rem 0; font-family: monospace;'>{item_line}</div>", unsafe_allow_html=True)
     
     if special_notes:
-        st.markdown("<br><strong style='color: red;'>⚠️ SPECIAL NOTES:</strong><br>", unsafe_allow_html=True)
+        st.markdown("<br><strong style='color: #C00000;'>⚠️ SPECIAL NOTES:</strong><br>", unsafe_allow_html=True)
         for note in special_notes:
-            st.markdown(f"• {note}<br>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color: #C00000; margin: 0.5rem 0;'>{note}</div>", unsafe_allow_html=True)
     
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown(f"""
+        </div>
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ccc;">
+            <strong>TOTAL ASSEMBLY TIME:</strong> ~7 minutes<br>
+            <strong>SHIP VIA:</strong> {SHIPPING_OPTIONS[shipping_key]['name']}<br>
+            <strong>CUSTOMER PRICE:</strong> ${customer_price:.2f}
+        </div>
+        <div style="margin-top: 1rem; border-top: 2px solid #F4B183; padding-top: 1rem;">
+            <strong>TECHNICIAN SIGNATURE:</strong> __________________ <strong>DATE:</strong> __________<br>
+            <strong>QC REVIEW:</strong> __________________ <strong>DATE:</strong> __________
+        </div>
+        </div>
+    """, unsafe_allow_html=True)
     
-    # Download buttons
-    col_txt, col_csv = st.columns(2)
-    
-    with col_txt:
-        order_info = {
-            'order_number': order_number,
-            'customer': customer_name if customer_name else '[Not specified]',
-            'project': project_name if project_name else '[Not specified]',
-            'tests': ', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules]),
-            'shipping': SHIPPING_OPTIONS[shipping_key]['name']
-        }
+    with col_download:
+        # Create downloadable pick list (TEXT FORMAT)
+        pick_list_text = f"""
+KELP SAMPLING KIT - PICK LIST
+{'='*60}
+
+ORDER #: {order_number}
+CUSTOMER: {customer_name if customer_name else '[Not specified]'}
+PROJECT: {project_name if project_name else '[Not specified]'}
+DATE: {datetime.now().strftime('%B %d, %Y - %I:%M %p')}
+TESTS ORDERED: {', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules])}
+
+{'='*60}
+PICK THE FOLLOWING ITEMS:
+{'='*60}
+
+"""
+        for idx, item in enumerate(pick_list_items, start=1):
+            item_line = f"[ ] {item['item']}"
+            if item['qty'] > 1:
+                item_line += f" × {item['qty']}"
+            item_line += f"\n    Location: {item['location']}\n"
+            pick_list_text += item_line
         
-        cost_info = {
-            'material_cost': material_cost,
-            'labor_cost': LABOR_COST,
-            'shipping_cost': shipping_cost,
-            'total_cost': total_cost,
-            'customer_price': customer_price
-        }
+        if special_notes:
+            pick_list_text += f"\n{'='*60}\n⚠️ SPECIAL NOTES:\n{'='*60}\n"
+            for note in special_notes:
+                pick_list_text += f"\n{note}\n"
         
-        formatted_doc = generate_formatted_picklist(order_info, pick_list_items, special_notes, cost_info)
+        pick_list_text += f"""
+{'='*60}
+ASSEMBLY DETAILS:
+{'='*60}
+Total Assembly Time: ~7 minutes
+Ship Via: {SHIPPING_OPTIONS[shipping_key]['name']}
+Customer Price: ${customer_price:.2f}
+
+{'='*60}
+SIGNATURES:
+{'='*60}
+Technician: __________________ Date: __________
+QC Review: __________________ Date: __________
+"""
         
         st.download_button(
-            label="📄 Download Pick List (TXT)",
-            data=formatted_doc,
+            label="📄 Download Pick List",
+            data=pick_list_text,
             file_name=f"KELP_PickList_{order_number}.txt",
             mime="text/plain",
-            use_container_width=True,
-            type="primary"
+            use_container_width=True
         )
-    
-    with col_csv:
+        
+        # Create CSV for components
         df_components = pd.DataFrame(pick_list_items)
         csv = df_components.to_csv(index=False)
         
@@ -567,13 +549,59 @@ if len(selected_modules) > 0:
             mime="text/csv",
             use_container_width=True
         )
+    
+    # Save order button
+    st.divider()
+    col_save, col_clear = st.columns(2)
+    
+    with col_save:
+        if st.button("💾 Save Order to History", type="primary", use_container_width=True):
+            order_data = {
+                'order_number': order_number,
+                'customer': customer_name,
+                'project': project_name,
+                'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'modules': selected_modules,
+                'sharing': sharing_a_c,
+                'shipping': shipping_key,
+                'total_cost': total_cost,
+                'customer_price': customer_price,
+                'items_count': len(pick_list_items)
+            }
+            st.session_state.order_history.append(order_data)
+            st.success(f"✅ Order {order_number} saved successfully!")
+    
+    with col_clear:
+        if st.button("🗑️ Clear Configuration", use_container_width=True):
+            st.session_state.modules_selected = {'base': True}
+            st.rerun()
 
 else:
-    st.info("👆 Please select at least one test module.")
+    st.info("👆 Please select at least one test module to generate a pick list.")
+
+# Order History
+if len(st.session_state.order_history) > 0:
+    st.divider()
+    st.header("📚 Order History")
+    
+    df_history = pd.DataFrame(st.session_state.order_history)
+    df_history['modules_str'] = df_history['modules'].apply(lambda x: ', '.join([m.replace('module_', '').upper() for m in x]))
+    
+    display_df = df_history[['order_number', 'customer', 'date', 'modules_str', 'shipping', 'customer_price']].copy()
+    display_df.columns = ['Order #', 'Customer', 'Date', 'Modules', 'Shipping', 'Price']
+    display_df['Price'] = display_df['Price'].apply(lambda x: f"${x:.2f}")
+    
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    if st.button("🗑️ Clear Order History"):
+        st.session_state.order_history = []
+        st.rerun()
 
 # Footer
 st.divider()
 st.caption(f"""
-**KETOS Environmental Laboratory (KELP)** | Smart Kit Builder v2.2  
-ISO/IEC 17025:2017 | TNI Accredited | Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+**KETOS Environmental Laboratory (KELP)** | Smart Kit Builder  
+✅ Sample sharing enabled | ✅ Reset button fixed | ✅ Text downloads only  
+ISO/IEC 17025:2017 Compliant | TNI Accredited  
+Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
 """)

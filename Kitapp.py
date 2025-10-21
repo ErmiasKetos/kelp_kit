@@ -5,8 +5,8 @@ from datetime import datetime
 
 # Page configuration
 st.set_page_config(
-    page_title="KELP Smart Kit Builder v2.2",
-    page_icon="🧪",
+    page_title="KELP Kit Builder",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )

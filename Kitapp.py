@@ -1,13 +1,20 @@
+#!/usr/bin/env python3
+"""
+KELP Smart Kit Builder - Streamlit Application v2.2
+ZERO EXTERNAL DEPENDENCIES VERSION (except streamlit and pandas):
+- No PDF libraries required
+- Generates professional formatted text document
+- Sample sharing logic for non-preserved tests
+- Fixed reset button
+"""
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from fpdf import FPDF
-import io
 
 # Page configuration
 st.set_page_config(
-    page_title="KELP Kit Builder v2.1",
+    page_title="KELP Smart Kit Builder v2.2",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -70,182 +77,95 @@ if 'order_history' not in st.session_state:
 def get_key(base_key):
     return f"{base_key}_{st.session_state.reset_counter}"
 
-# PDF Generation Class
-class PickListPDF(FPDF):
-    def __init__(self):
-        super().__init__()
-        self.add_page()
-        self.set_auto_page_break(auto=True, margin=15)
+def generate_formatted_picklist(order_info, pick_list_items, special_notes, cost_info):
+    """Generate professional formatted text document"""
+    doc = []
     
-    def header(self):
-        self.set_font('Arial', 'B', 18)
-        self.set_text_color(31, 78, 120)
-        self.cell(0, 10, 'KETOS ENVIRONMENTAL LABORATORY', 0, 1, 'C')
-        self.set_font('Arial', 'B', 14)
-        self.cell(0, 10, 'SAMPLING KIT - PICK LIST', 0, 1, 'C')
-        self.ln(5)
+    # Header
+    doc.append("=" * 80)
+    doc.append("KETOS ENVIRONMENTAL LABORATORY")
+    doc.append("SAMPLING KIT - PICK LIST")
+    doc.append("ISO/IEC 17025:2017 Accredited | TNI Certified")
+    doc.append("=" * 80)
+    doc.append("")
     
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.set_text_color(128, 128, 128)
-        self.cell(0, 10, f'KELP-SOP-KIT-001 | ISO/IEC 17025:2017 | Page {self.page_no()}', 0, 0, 'C')
-
-def generate_pdf_picklist(order_info, pick_list_items, special_notes, cost_info):
-    """Generate professional PDF pick list using fpdf2"""
-    pdf = PickListPDF()
-    
-    # Order Information Section
-    pdf.set_font('Arial', 'B', 10)
-    pdf.set_fill_color(217, 225, 242)
-    
-    # Table header
-    pdf.cell(45, 7, 'Order Number:', 1, 0, 'L', True)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(90, 7, order_info['order_number'], 1, 0, 'L')
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(25, 7, 'Date:', 1, 0, 'L', True)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(0, 7, datetime.now().strftime('%B %d, %Y'), 1, 1, 'L')
-    
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(45, 7, 'Customer:', 1, 0, 'L', True)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(90, 7, order_info['customer'], 1, 0, 'L')
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(25, 7, 'Time:', 1, 0, 'L', True)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(0, 7, datetime.now().strftime('%I:%M %p'), 1, 1, 'L')
-    
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(45, 7, 'Project:', 1, 0, 'L', True)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(90, 7, order_info['project'], 1, 0, 'L')
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(25, 7, 'Technician:', 1, 0, 'L', True)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(0, 7, '________________', 1, 1, 'L')
-    
-    pdf.ln(3)
-    
-    # Tests Ordered
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(0, 7, f'Tests Ordered: {order_info["tests"]}', 0, 1, 'L')
-    pdf.ln(5)
+    # Order Information
+    doc.append("ORDER INFORMATION")
+    doc.append("-" * 80)
+    doc.append(f"Order Number:     {order_info['order_number']}")
+    doc.append(f"Customer:         {order_info['customer']}")
+    doc.append(f"Project:          {order_info['project']}")
+    doc.append(f"Date:             {datetime.now().strftime('%B %d, %Y')}")
+    doc.append(f"Time:             {datetime.now().strftime('%I:%M %p')}")
+    doc.append(f"Technician:       ____________________")
+    doc.append("")
+    doc.append(f"Tests Ordered:    {order_info['tests']}")
+    doc.append("")
     
     # Components Section
-    pdf.set_font('Arial', 'B', 12)
-    pdf.set_fill_color(68, 114, 196)
-    pdf.set_text_color(255, 255, 255)
-    pdf.cell(0, 10, 'COMPONENTS TO PICK', 0, 1, 'L', True)
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(2)
+    doc.append("=" * 80)
+    doc.append("COMPONENTS TO PICK")
+    doc.append("=" * 80)
+    doc.append("")
+    doc.append(f"{'':3} {'Item Description':<50} {'Qty':>5} {'P/N':<15} {'Location':<10}")
+    doc.append("-" * 80)
     
-    # Table header
-    pdf.set_font('Arial', 'B', 9)
-    pdf.set_fill_color(68, 114, 196)
-    pdf.set_text_color(255, 255, 255)
-    pdf.cell(10, 7, '', 1, 0, 'C', True)  # Checkbox
-    pdf.cell(90, 7, 'Item Description', 1, 0, 'L', True)
-    pdf.cell(15, 7, 'Qty', 1, 0, 'C', True)
-    pdf.cell(35, 7, 'P/N', 1, 0, 'L', True)
-    pdf.cell(40, 7, 'Location', 1, 1, 'L', True)
-    
-    # Table rows
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font('Arial', '', 8)
-    
-    fill = False
     for item in pick_list_items:
-        if fill:
-            pdf.set_fill_color(240, 240, 240)
-        else:
-            pdf.set_fill_color(255, 255, 255)
+        item_desc = item['item']
+        if len(item_desc) > 48:
+            item_desc = item_desc[:48] + ".."
         
-        # Checkbox
-        pdf.cell(10, 6, '[ ]', 1, 0, 'C', fill)
-        
-        # Item description
-        item_text = item['item']
-        if item['qty'] > 1:
-            item_text += f" x {item['qty']}"
-        pdf.cell(90, 6, item_text[:50], 1, 0, 'L', fill)
-        
-        # Quantity
-        pdf.cell(15, 6, str(item['qty']), 1, 0, 'C', fill)
-        
-        # Part number
-        pdf.cell(35, 6, item['pn'], 1, 0, 'L', fill)
-        
-        # Location
-        pdf.cell(40, 6, item['location'], 1, 1, 'L', fill)
-        
-        fill = not fill
+        doc.append(f"[ ] {item_desc:<50} {item['qty']:>5} {item['pn']:<15} {item['location']:<10}")
     
-    pdf.ln(5)
+    doc.append("")
     
     # Special Instructions
     if special_notes:
-        pdf.set_font('Arial', 'B', 11)
-        pdf.set_text_color(192, 0, 0)
-        pdf.cell(0, 8, 'SPECIAL INSTRUCTIONS', 0, 1, 'L')
-        pdf.set_font('Arial', '', 9)
+        doc.append("=" * 80)
+        doc.append("⚠️  SPECIAL INSTRUCTIONS - READ CAREFULLY")
+        doc.append("=" * 80)
         for note in special_notes:
-            pdf.multi_cell(0, 5, f'  * {note}')
-        pdf.ln(3)
-        pdf.set_text_color(0, 0, 0)
+            # Wrap long notes
+            words = note.split()
+            line = ""
+            for word in words:
+                if len(line + word) > 76:
+                    doc.append(f"  • {line}")
+                    line = word + " "
+                else:
+                    line += word + " "
+            if line:
+                doc.append(f"  • {line.strip()}")
+        doc.append("")
     
     # Assembly Information
-    pdf.set_font('Arial', 'B', 11)
-    pdf.set_fill_color(226, 240, 217)
-    pdf.cell(0, 8, 'ASSEMBLY INFORMATION', 0, 1, 'L', True)
-    pdf.ln(1)
+    doc.append("=" * 80)
+    doc.append("ASSEMBLY INFORMATION")
+    doc.append("=" * 80)
+    doc.append(f"Total Items:          {len(pick_list_items)}")
+    doc.append(f"Assembly Time:        ~7 minutes")
+    doc.append(f"Shipping Method:      {order_info['shipping']}")
+    doc.append(f"Customer Price:       ${cost_info['customer_price']:.2f}")
+    doc.append("")
     
-    pdf.set_font('Arial', '', 9)
-    pdf.cell(50, 6, 'Total Items:', 0, 0, 'L')
-    pdf.cell(45, 6, str(len(pick_list_items)), 0, 0, 'L')
-    pdf.cell(50, 6, 'Assembly Time:', 0, 0, 'L')
-    pdf.cell(0, 6, '~7 minutes', 0, 1, 'L')
+    # Quality Control Section
+    doc.append("=" * 80)
+    doc.append("QUALITY CONTROL - SIGNATURES REQUIRED")
+    doc.append("=" * 80)
+    doc.append("")
+    doc.append("Assembled By:  ______________________    Date: __________  Time: __________")
+    doc.append("")
+    doc.append("QC Reviewed:   ______________________    Date: __________  Initials: ______")
+    doc.append("")
+    doc.append("")
     
-    pdf.cell(50, 6, 'Shipping Method:', 0, 0, 'L')
-    pdf.cell(45, 6, order_info['shipping'][:30], 0, 0, 'L')
-    pdf.cell(50, 6, 'Customer Price:', 0, 0, 'L')
-    pdf.cell(0, 6, f"${cost_info['customer_price']:.2f}", 0, 1, 'L')
+    # Footer
+    doc.append("=" * 80)
+    doc.append(f"Document Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    doc.append("KELP-SOP-KIT-001 | For Internal Laboratory Use Only")
+    doc.append("=" * 80)
     
-    pdf.ln(8)
-    
-    # Quality Control Signatures
-    pdf.set_font('Arial', 'B', 11)
-    pdf.set_fill_color(255, 242, 204)
-    pdf.cell(0, 8, 'QUALITY CONTROL', 0, 1, 'L', True)
-    pdf.ln(2)
-    
-    pdf.set_font('Arial', '', 9)
-    # First row
-    pdf.cell(40, 7, 'Assembled By:', 1, 0, 'L')
-    pdf.cell(60, 7, '________________', 1, 0, 'C')
-    pdf.cell(20, 7, 'Date:', 1, 0, 'L')
-    pdf.cell(35, 7, '__________', 1, 0, 'C')
-    pdf.cell(15, 7, 'Time:', 1, 0, 'L')
-    pdf.cell(0, 7, '__________', 1, 1, 'C')
-    
-    # Second row
-    pdf.cell(40, 7, 'QC Reviewed By:', 1, 0, 'L')
-    pdf.cell(60, 7, '________________', 1, 0, 'C')
-    pdf.cell(20, 7, 'Date:', 1, 0, 'L')
-    pdf.cell(35, 7, '__________', 1, 0, 'C')
-    pdf.cell(15, 7, 'Initials:', 1, 0, 'L')
-    pdf.cell(0, 7, '__________', 1, 1, 'C')
-    
-    pdf.ln(5)
-    
-    # Footer note
-    pdf.set_font('Arial', 'I', 8)
-    pdf.set_text_color(128, 128, 128)
-    pdf.multi_cell(0, 4, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | TNI Accredited Laboratory')
-    
-    # Return PDF as bytes
-    return bytes(pdf.output())
+    return "\n".join(doc)
 
 # Component database
 COMPONENT_LIBRARY = {
@@ -370,7 +290,7 @@ SHIPPING_OPTIONS = {
 LABOR_COST = 7.46
 
 # Header
-st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder v2.1</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder v2.2</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Intelligent sample sharing • Zero redundancy • EPA compliant</div>', unsafe_allow_html=True)
 
 # Sidebar
@@ -575,7 +495,7 @@ if len(selected_modules) > 0:
         
         if module_key == 'module_c':
             if sharing_a_c:
-                special_notes.append("Anions (NO3, Cl, SO4, F) share bottle with General Chemistry")
+                special_notes.append("Anions (NO3, Cl, SO4, F) share bottle with General Chemistry (no acid preservation)")
                 continue
             else:
                 pick_list_items.append({
@@ -615,9 +535,9 @@ if len(selected_modules) > 0:
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Download buttons
-    col_pdf, col_csv = st.columns(2)
+    col_txt, col_csv = st.columns(2)
     
-    with col_pdf:
+    with col_txt:
         order_info = {
             'order_number': order_number,
             'customer': customer_name if customer_name else '[Not specified]',
@@ -634,13 +554,13 @@ if len(selected_modules) > 0:
             'customer_price': customer_price
         }
         
-        pdf_bytes = generate_pdf_picklist(order_info, pick_list_items, special_notes, cost_info)
+        formatted_doc = generate_formatted_picklist(order_info, pick_list_items, special_notes, cost_info)
         
         st.download_button(
-            label="📄 Download PDF Pick List",
-            data=pdf_bytes,
-            file_name=f"KELP_PickList_{order_number}.pdf",
-            mime="application/pdf",
+            label="📄 Download Pick List (TXT)",
+            data=formatted_doc,
+            file_name=f"KELP_PickList_{order_number}.txt",
+            mime="text/plain",
             use_container_width=True,
             type="primary"
         )
@@ -663,6 +583,6 @@ else:
 # Footer
 st.divider()
 st.caption(f"""
-**KETOS Environmental Laboratory (KELP)** | Smart Kit Builder v2.1  
+**KETOS Environmental Laboratory (KELP)** | Smart Kit Builder v2.2  
 ISO/IEC 17025:2017 | TNI Accredited | Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
 """)

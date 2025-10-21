@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-KELP Smart Kit Builder - Streamlit Application v2.2
-ZERO EXTERNAL DEPENDENCIES VERSION (except streamlit and pandas):
-- No PDF libraries required
-- Generates professional formatted text document
-- Sample sharing logic for non-preserved tests
-- Fixed reset button
-"""
 
 import streamlit as st
 import pandas as pd

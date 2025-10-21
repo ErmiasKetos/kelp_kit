@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-KELP Smart Kit Builder - Streamlit Application
-Interactive sampling kit configuration and pick list generator
-"""
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -11,8 +5,8 @@ import json
 
 # Page configuration
 st.set_page_config(
-    page_title="KELP Smart Kit Builder",
-    page_icon="🧪",
+    page_title="KELP Kit Builder",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )

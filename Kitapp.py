@@ -2,17 +2,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from fpdf import FPDF
 import io
 
 # Page configuration
 st.set_page_config(
-    page_title="KELP Smart Kit Builder v2.0",
+    page_title="KELP Kit Builder",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -32,13 +27,6 @@ st.markdown("""
         color: #4472C4;
         margin-bottom: 2rem;
     }
-    .module-card {
-        background-color: #E2EFDA;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #4472C4;
-        margin-bottom: 1rem;
-    }
     .cost-summary {
         background-color: #D9E1F2;
         padding: 1.5rem;
@@ -52,13 +40,6 @@ st.markdown("""
         border-radius: 8px;
         border: 2px solid #F4B183;
         font-family: 'Courier New', monospace;
-    }
-    .warning-box {
-        background-color: #FCE4D6;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #FF0000;
-        margin: 1rem 0;
     }
     .sharing-info {
         background-color: #E2F0D9;
@@ -77,7 +58,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state with unique key
+# Initialize session state
 if 'reset_counter' not in st.session_state:
     st.session_state.reset_counter = 0
 if 'order_number' not in st.session_state:
@@ -89,7 +70,184 @@ if 'order_history' not in st.session_state:
 def get_key(base_key):
     return f"{base_key}_{st.session_state.reset_counter}"
 
-# Component database - CORRECTED VERSION
+# PDF Generation Class
+class PickListPDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.add_page()
+        self.set_auto_page_break(auto=True, margin=15)
+    
+    def header(self):
+        self.set_font('Arial', 'B', 18)
+        self.set_text_color(31, 78, 120)
+        self.cell(0, 10, 'KETOS ENVIRONMENTAL LABORATORY', 0, 1, 'C')
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 10, 'SAMPLING KIT - PICK LIST', 0, 1, 'C')
+        self.ln(5)
+    
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'KELP-SOP-KIT-001 | ISO/IEC 17025:2017 | Page {self.page_no()}', 0, 0, 'C')
+
+def generate_pdf_picklist(order_info, pick_list_items, special_notes, cost_info):
+    """Generate professional PDF pick list using fpdf2"""
+    pdf = PickListPDF()
+    
+    # Order Information Section
+    pdf.set_font('Arial', 'B', 10)
+    pdf.set_fill_color(217, 225, 242)
+    
+    # Table header
+    pdf.cell(45, 7, 'Order Number:', 1, 0, 'L', True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(90, 7, order_info['order_number'], 1, 0, 'L')
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(25, 7, 'Date:', 1, 0, 'L', True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(0, 7, datetime.now().strftime('%B %d, %Y'), 1, 1, 'L')
+    
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(45, 7, 'Customer:', 1, 0, 'L', True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(90, 7, order_info['customer'], 1, 0, 'L')
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(25, 7, 'Time:', 1, 0, 'L', True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(0, 7, datetime.now().strftime('%I:%M %p'), 1, 1, 'L')
+    
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(45, 7, 'Project:', 1, 0, 'L', True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(90, 7, order_info['project'], 1, 0, 'L')
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(25, 7, 'Technician:', 1, 0, 'L', True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(0, 7, '________________', 1, 1, 'L')
+    
+    pdf.ln(3)
+    
+    # Tests Ordered
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(0, 7, f'Tests Ordered: {order_info["tests"]}', 0, 1, 'L')
+    pdf.ln(5)
+    
+    # Components Section
+    pdf.set_font('Arial', 'B', 12)
+    pdf.set_fill_color(68, 114, 196)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 10, 'COMPONENTS TO PICK', 0, 1, 'L', True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(2)
+    
+    # Table header
+    pdf.set_font('Arial', 'B', 9)
+    pdf.set_fill_color(68, 114, 196)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(10, 7, '', 1, 0, 'C', True)  # Checkbox
+    pdf.cell(90, 7, 'Item Description', 1, 0, 'L', True)
+    pdf.cell(15, 7, 'Qty', 1, 0, 'C', True)
+    pdf.cell(35, 7, 'P/N', 1, 0, 'L', True)
+    pdf.cell(40, 7, 'Location', 1, 1, 'L', True)
+    
+    # Table rows
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('Arial', '', 8)
+    
+    fill = False
+    for item in pick_list_items:
+        if fill:
+            pdf.set_fill_color(240, 240, 240)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        
+        # Checkbox
+        pdf.cell(10, 6, '[ ]', 1, 0, 'C', fill)
+        
+        # Item description
+        item_text = item['item']
+        if item['qty'] > 1:
+            item_text += f" x {item['qty']}"
+        pdf.cell(90, 6, item_text[:50], 1, 0, 'L', fill)
+        
+        # Quantity
+        pdf.cell(15, 6, str(item['qty']), 1, 0, 'C', fill)
+        
+        # Part number
+        pdf.cell(35, 6, item['pn'], 1, 0, 'L', fill)
+        
+        # Location
+        pdf.cell(40, 6, item['location'], 1, 1, 'L', fill)
+        
+        fill = not fill
+    
+    pdf.ln(5)
+    
+    # Special Instructions
+    if special_notes:
+        pdf.set_font('Arial', 'B', 11)
+        pdf.set_text_color(192, 0, 0)
+        pdf.cell(0, 8, 'SPECIAL INSTRUCTIONS', 0, 1, 'L')
+        pdf.set_font('Arial', '', 9)
+        for note in special_notes:
+            pdf.multi_cell(0, 5, f'  * {note}')
+        pdf.ln(3)
+        pdf.set_text_color(0, 0, 0)
+    
+    # Assembly Information
+    pdf.set_font('Arial', 'B', 11)
+    pdf.set_fill_color(226, 240, 217)
+    pdf.cell(0, 8, 'ASSEMBLY INFORMATION', 0, 1, 'L', True)
+    pdf.ln(1)
+    
+    pdf.set_font('Arial', '', 9)
+    pdf.cell(50, 6, 'Total Items:', 0, 0, 'L')
+    pdf.cell(45, 6, str(len(pick_list_items)), 0, 0, 'L')
+    pdf.cell(50, 6, 'Assembly Time:', 0, 0, 'L')
+    pdf.cell(0, 6, '~7 minutes', 0, 1, 'L')
+    
+    pdf.cell(50, 6, 'Shipping Method:', 0, 0, 'L')
+    pdf.cell(45, 6, order_info['shipping'][:30], 0, 0, 'L')
+    pdf.cell(50, 6, 'Customer Price:', 0, 0, 'L')
+    pdf.cell(0, 6, f"${cost_info['customer_price']:.2f}", 0, 1, 'L')
+    
+    pdf.ln(8)
+    
+    # Quality Control Signatures
+    pdf.set_font('Arial', 'B', 11)
+    pdf.set_fill_color(255, 242, 204)
+    pdf.cell(0, 8, 'QUALITY CONTROL', 0, 1, 'L', True)
+    pdf.ln(2)
+    
+    pdf.set_font('Arial', '', 9)
+    # First row
+    pdf.cell(40, 7, 'Assembled By:', 1, 0, 'L')
+    pdf.cell(60, 7, '________________', 1, 0, 'C')
+    pdf.cell(20, 7, 'Date:', 1, 0, 'L')
+    pdf.cell(35, 7, '__________', 1, 0, 'C')
+    pdf.cell(15, 7, 'Time:', 1, 0, 'L')
+    pdf.cell(0, 7, '__________', 1, 1, 'C')
+    
+    # Second row
+    pdf.cell(40, 7, 'QC Reviewed By:', 1, 0, 'L')
+    pdf.cell(60, 7, '________________', 1, 0, 'C')
+    pdf.cell(20, 7, 'Date:', 1, 0, 'L')
+    pdf.cell(35, 7, '__________', 1, 0, 'C')
+    pdf.cell(15, 7, 'Initials:', 1, 0, 'L')
+    pdf.cell(0, 7, '__________', 1, 1, 'C')
+    
+    pdf.ln(5)
+    
+    # Footer note
+    pdf.set_font('Arial', 'I', 8)
+    pdf.set_text_color(128, 128, 128)
+    pdf.multi_cell(0, 4, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | TNI Accredited Laboratory')
+    
+    # Return PDF as bytes
+    return bytes(pdf.output())
+
+# Component database
 COMPONENT_LIBRARY = {
     'base': {
         'name': 'BASE COMPONENTS',
@@ -115,7 +273,7 @@ COMPONENT_LIBRARY = {
         'color': '#4472C4',
         'tests': ['Alkalinity', 'Total Hardness', 'Calcium Hardness', 'Turbidity', 'TDS'],
         'preservation': 'NONE',
-        'can_share_with': ['module_c'],  # Can share bottle with anions
+        'can_share_with': ['module_c'],
         'note': 'No acid preservation - compatible with anions'
     },
     'module_b': {
@@ -124,25 +282,23 @@ COMPONENT_LIBRARY = {
         'cost': 5.00,
         'items': [
             {'item': '250mL HDPE bottle (trace-metal clean)', 'qty': 1, 'cost': 3.50, 'pn': 'Bottle_02', 'location': 'Shelf B2'},
-            {'item': 'HNO₃ preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_HNO3', 'location': 'Shelf D1'},
+            {'item': 'HNO3 preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_HNO3', 'location': 'Shelf D1'},
         ],
         'color': '#70AD47',
         'tests': ['Lead (Pb)', 'Copper (Cu)', 'Arsenic (As)', 'Chromium (Cr)', 'Zinc (Zn)', 'Iron (Fe)', 'Manganese (Mn)', 'Other trace metals'],
-        'preservation': 'HNO₃ to pH <2',
-        'can_share_with': [],  # CANNOT share - requires acid
-        'note': 'Requires HNO₃ preservation - SEPARATE bottle required'
+        'preservation': 'HNO3 to pH <2',
+        'can_share_with': [],
+        'note': 'Requires HNO3 preservation - SEPARATE bottle required'
     },
     'module_c': {
         'name': 'MODULE C: Anions (EPA 300.1)',
         'description': 'Chloride, Sulfate, Nitrate, Fluoride',
-        'cost': 0.00,  # COST = 0 if sharing with Module A
-        'items': [
-            # Items added conditionally based on sharing
-        ],
+        'cost': 0.00,
+        'items': [],
         'color': '#FFC000',
-        'tests': ['Chloride (Cl⁻)', 'Sulfate (SO₄²⁻)', 'Nitrate (NO₃⁻)', 'Fluoride (F⁻)'],
+        'tests': ['Chloride (Cl-)', 'Sulfate (SO4 2-)', 'Nitrate (NO3-)', 'Fluoride (F-)'],
         'preservation': 'NONE',
-        'can_share_with': ['module_a'],  # Can share bottle with gen chem
+        'can_share_with': ['module_a'],
         'note': 'No acid preservation - can SHARE bottle with Module A'
     },
     'module_d': {
@@ -151,13 +307,13 @@ COMPONENT_LIBRARY = {
         'cost': 4.00,
         'items': [
             {'item': '500mL PP bottle (nutrients)', 'qty': 1, 'cost': 2.50, 'pn': 'Bottle_04', 'location': 'Shelf B4'},
-            {'item': 'H₂SO₄ preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_H2SO4', 'location': 'Shelf D2'},
+            {'item': 'H2SO4 preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_H2SO4', 'location': 'Shelf D2'},
         ],
         'color': '#5B9BD5',
-        'tests': ['Ammonia (NH₃)', 'Total Kjeldahl Nitrogen (TKN)', 'Nitrite (NO₂⁻)', 'Phosphate (PO₄³⁻)'],
-        'preservation': 'H₂SO₄ to pH <2',
-        'can_share_with': [],  # CANNOT share - requires acid
-        'note': 'Requires H₂SO₄ preservation - SEPARATE bottle required'
+        'tests': ['Ammonia (NH3)', 'Total Kjeldahl Nitrogen (TKN)', 'Nitrite (NO2-)', 'Phosphate (PO4 3-)'],
+        'preservation': 'H2SO4 to pH <2',
+        'can_share_with': [],
+        'note': 'Requires H2SO4 preservation - SEPARATE bottle required'
     },
     'module_p': {
         'name': 'MODULE P: PFAS (EPA 537.1 / 1633)',
@@ -171,7 +327,7 @@ COMPONENT_LIBRARY = {
         ],
         'color': '#E7E6E6',
         'tests': ['PFAS-3', 'PFAS-14', 'PFAS-18', 'PFAS-25', 'PFAS-40'],
-        'special_warning': '⚠️ PFAS KIT - Use ONLY PFAS-free materials! NO standard foam, NO fluorinated materials!',
+        'special_warning': 'PFAS KIT - Use ONLY PFAS-free materials! NO standard foam, NO fluorinated materials!',
         'preservation': 'NONE (but requires PFAS-free containers)',
         'can_share_with': [],
         'note': 'PFAS-free containers required - CANNOT share'
@@ -211,162 +367,13 @@ SHIPPING_OPTIONS = {
     }
 }
 
-LABOR_COST = 7.46  # 7 minutes at $63.94/hour
-
-def generate_pdf_picklist(order_info, pick_list_items, special_notes, cost_info):
-    """Generate professional PDF pick list"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-    story = []
-    styles = getSampleStyleSheet()
-    
-    # Custom styles
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        textColor=colors.HexColor('#1F4E78'),
-        spaceAfter=6,
-        alignment=TA_CENTER
-    )
-    
-    header_style = ParagraphStyle(
-        'CustomHeader',
-        parent=styles['Heading2'],
-        fontSize=12,
-        textColor=colors.HexColor('#1F4E78'),
-        spaceAfter=10,
-        spaceBefore=10
-    )
-    
-    # Title
-    story.append(Paragraph("KETOS ENVIRONMENTAL LABORATORY", title_style))
-    story.append(Paragraph("SAMPLING KIT - PICK LIST", title_style))
-    story.append(Spacer(1, 0.2*inch))
-    
-    # Order information table
-    order_data = [
-        ['Order Number:', order_info['order_number'], 'Date:', datetime.now().strftime('%B %d, %Y')],
-        ['Customer:', order_info['customer'], 'Time:', datetime.now().strftime('%I:%M %p')],
-        ['Project:', order_info['project'], 'Technician:', '________________'],
-    ]
-    
-    order_table = Table(order_data, colWidths=[1.2*inch, 2.5*inch, 0.8*inch, 1.5*inch])
-    order_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#D9E1F2')),
-        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#D9E1F2')),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    story.append(order_table)
-    story.append(Spacer(1, 0.2*inch))
-    
-    # Tests ordered
-    story.append(Paragraph(f"<b>Tests Ordered:</b> {order_info['tests']}", styles['Normal']))
-    story.append(Spacer(1, 0.2*inch))
-    
-    # Pick list header
-    story.append(Paragraph("COMPONENTS TO PICK", header_style))
-    
-    # Pick list table
-    pick_data = [['☐', 'Item Description', 'Qty', 'P/N', 'Location']]
-    for item in pick_list_items:
-        pick_data.append([
-            '☐',
-            item['item'],
-            str(item['qty']),
-            item['pn'],
-            item['location']
-        ])
-    
-    pick_table = Table(pick_data, colWidths=[0.3*inch, 3.2*inch, 0.5*inch, 1.0*inch, 1.0*inch])
-    pick_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F0F0F0')]),
-    ]))
-    story.append(pick_table)
-    story.append(Spacer(1, 0.15*inch))
-    
-    # Special notes
-    if special_notes:
-        story.append(Paragraph("⚠️ SPECIAL INSTRUCTIONS", header_style))
-        for note in special_notes:
-            warning_style = ParagraphStyle(
-                'Warning',
-                parent=styles['Normal'],
-                textColor=colors.HexColor('#C00000'),
-                fontSize=10,
-                leftIndent=10
-            )
-            story.append(Paragraph(f"• {note}", warning_style))
-        story.append(Spacer(1, 0.15*inch))
-    
-    # Assembly information
-    story.append(Paragraph("ASSEMBLY INFORMATION", header_style))
-    assembly_data = [
-        ['Total Items:', str(len(pick_list_items)), 'Assembly Time:', '~7 minutes'],
-        ['Shipping Method:', order_info['shipping'], 'Customer Price:', f"${cost_info['customer_price']:.2f}"],
-    ]
-    
-    assembly_table = Table(assembly_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
-    assembly_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E2F0D9')),
-        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#E2F0D9')),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-    story.append(assembly_table)
-    story.append(Spacer(1, 0.3*inch))
-    
-    # Signature section
-    story.append(Paragraph("QUALITY CONTROL", header_style))
-    sig_data = [
-        ['Assembled By:', '________________', 'Date:', '__________', 'Time:', '__________'],
-        ['QC Reviewed By:', '________________', 'Date:', '__________', 'Initials:', '__________'],
-    ]
-    
-    sig_table = Table(sig_data, colWidths=[1.2*inch, 1.5*inch, 0.6*inch, 1.0*inch, 0.7*inch, 1.0*inch])
-    sig_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#FFF2CC')),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-    story.append(sig_table)
-    story.append(Spacer(1, 0.2*inch))
-    
-    # Footer
-    footer_text = f"<font size=8>KELP-SOP-KIT-001 | ISO/IEC 17025:2017 | TNI Accredited | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</font>"
-    story.append(Paragraph(footer_text, styles['Normal']))
-    
-    # Build PDF
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
+LABOR_COST = 7.46
 
 # Header
-st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder v2.0</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder v2.1</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Intelligent sample sharing • Zero redundancy • EPA compliant</div>', unsafe_allow_html=True)
 
-# Sidebar - Order Information
+# Sidebar
 with st.sidebar:
     st.header("📋 Order Information")
     order_number = st.text_input("Order Number", value=st.session_state.order_number, key=get_key("order_num"))
@@ -382,19 +389,17 @@ with st.sidebar:
     
     st.divider()
     
-    # FIXED RESET BUTTON
     if st.button("🔄 Reset Configuration", type="secondary", key=get_key("reset_btn")):
         st.session_state.reset_counter += 1
         st.rerun()
 
-# Main content area - Two columns
+# Main content
 col1, col2 = st.columns([2, 1])
 
 with col1:
     st.header("1️⃣ Select Test Modules")
     st.markdown("*Choose the analytical tests your customer needs. The system automatically optimizes bottle usage.*")
     
-    # Module selection with expandable details
     modules_to_show = ['module_a', 'module_b', 'module_c', 'module_d', 'module_p', 'module_m']
     
     selected_modules = []
@@ -431,56 +436,49 @@ with col1:
     
     st.divider()
     
-    # Shipping selection
     st.header("2️⃣ Select Shipping Option")
     
     col_std, col_comp = st.columns(2)
     
-    compliance_shipping = False
+    compliance_shipping = st.session_state.get('compliance_shipping', False)
+    
     with col_std:
         if st.button("📦 Standard Shipping - $8.00", key=get_key("ship_standard"), 
                      type="primary" if not compliance_shipping else "secondary",
                      use_container_width=True):
+            st.session_state.compliance_shipping = False
             compliance_shipping = False
         st.caption("USPS/FedEx Ground (3-5 days)")
-        st.caption("✓ Research/non-compliance samples")
     
     with col_comp:
         if st.button("❄️ Compliance Shipping - $50.00", key=get_key("ship_compliance"),
-                     type="secondary",
+                     type="primary" if compliance_shipping else "secondary",
                      use_container_width=True):
+            st.session_state.compliance_shipping = True
             compliance_shipping = True
         st.caption("FedEx 2-Day with cooler & ice")
-        st.caption("✓ Regulatory/compliance samples")
 
 with col2:
     st.header("💰 Cost Summary")
     
-    # Calculate costs with SAMPLE SHARING LOGIC
+    # Calculate costs with sharing logic
     material_cost = COMPONENT_LIBRARY['base']['cost']
     bottles_count = 0
     preservatives_count = 0
     
-    # Check for sample sharing
     sharing_a_c = ('module_a' in selected_modules and 'module_c' in selected_modules)
     
-    # Add costs for selected modules
     for module_key in selected_modules:
         module = COMPONENT_LIBRARY[module_key]
         
-        # Special handling for Module C (anions)
         if module_key == 'module_c' and sharing_a_c:
-            # Module C shares bottle with Module A - NO additional cost or bottle
-            st.info("📦 Anions sharing bottle with General Chemistry")
             continue
         elif module_key == 'module_c' and not sharing_a_c:
-            # Module C needs its own bottle
             material_cost += 1.50
             bottles_count += 1
         else:
             material_cost += module['cost']
             
-            # Count bottles
             if module_key == 'module_a':
                 bottles_count += 1
             elif module_key == 'module_b':
@@ -490,12 +488,11 @@ with col2:
                 bottles_count += 1
                 preservatives_count += 1
             elif module_key == 'module_p':
-                bottles_count += 2  # PFAS needs 2 bottles
+                bottles_count += 2
             elif module_key == 'module_m':
                 bottles_count += 1
                 preservatives_count += 1
     
-    # Add shipping
     if compliance_shipping:
         shipping_cost = SHIPPING_OPTIONS['compliance']['cost']
         shipping_type = 'Compliance'
@@ -508,7 +505,6 @@ with col2:
     margin = customer_price - total_cost
     margin_pct = (margin / customer_price) * 100 if customer_price > 0 else 0
     
-    # Display summary
     st.markdown(f"""
     <div class="cost-summary">
         <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">Modules Selected: {len(selected_modules)}</div>
@@ -533,7 +529,7 @@ with col2:
                 <span style="font-weight: bold;">${shipping_cost:.2f}</span>
             </div>
             <div style="display: flex; justify-content: space-between; padding-top: 0.5rem; border-top: 1px solid #ccc;">
-                <span style="font-weight: bold;">Total Cost to KELP:</span>
+                <span style="font-weight: bold;">Total Cost:</span>
                 <span style="font-weight: bold; color: #1F4E78;">${total_cost:.2f}</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; color: #70AD47;">
@@ -546,55 +542,42 @@ with col2:
     else:
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # Sample sharing notification
     if sharing_a_c:
         st.markdown("""
         <div class="sharing-info">
             <strong>✅ SMART SHARING:</strong><br>
-            General Chemistry + Anions tests will share a single 250mL bottle<br>
-            <em>Savings: 1 bottle, $1.50</em>
+            General Chemistry + Anions share 1 bottle<br>
+            <em>Savings: $1.50 + 1 bottle</em>
         </div>
         """, unsafe_allow_html=True)
     
-    # Visual indicator
     st.divider()
     st.subheader("📦 Kit Contents")
-    
     st.metric("Sample Bottles", bottles_count)
-    st.metric("Preservative Vials", preservatives_count)
-    
-    has_ice = compliance_shipping
-    st.metric("Temperature Control", "Yes ❄️" if has_ice else "No")
+    st.metric("Preservatives", preservatives_count)
+    st.metric("Temp Control", "Yes ❄️" if compliance_shipping else "No")
 
-# Pick List Section
+# Pick List
 st.divider()
-st.header("📝 PICK LIST - For Lab Technician")
+st.header("📝 PICK LIST")
 
 if len(selected_modules) > 0:
-    
-    # Generate pick list with sample sharing logic
     pick_list_items = []
     special_notes = []
     
-    # Always include base
     for item in COMPONENT_LIBRARY['base']['items']:
-        # Check if PFAS is selected - skip standard gloves
         if 'Gloves' in item['item'] and 'module_p' in selected_modules:
-            continue  # Skip standard gloves, PFAS module adds PFAS-free gloves
+            continue
         pick_list_items.append(item)
     
-    # Add module components with SHARING LOGIC
     for module_key in selected_modules:
         module = COMPONENT_LIBRARY[module_key]
         
-        # Special handling for Module C
         if module_key == 'module_c':
             if sharing_a_c:
-                # Module C shares with Module A - add note but no bottle
-                special_notes.append("✅ Anions (NO₃, Cl, SO₄, F) will use SAME bottle as General Chemistry (no acid preservation)")
+                special_notes.append("Anions (NO3, Cl, SO4, F) share bottle with General Chemistry")
                 continue
             else:
-                # Module C needs own bottle
                 pick_list_items.append({
                     'item': '250mL PP bottle (anions)', 
                     'qty': 1, 
@@ -603,63 +586,38 @@ if len(selected_modules) > 0:
                     'location': 'Shelf B3'
                 })
         else:
-            # Add all items from other modules
             for item in module['items']:
                 pick_list_items.append(item)
         
-        # Add special warnings
         if 'special_warning' in module:
             special_notes.append(module['special_warning'])
     
-    # Add shipping items
     shipping_key = 'compliance' if compliance_shipping else 'standard'
     for item in SHIPPING_OPTIONS[shipping_key].get('items', []):
         pick_list_items.append(item)
     
-    # Display web preview
+    # Display preview
     st.markdown(f"""
     <div class="pick-list">
-    <div style="font-weight: bold; font-size: 1.2rem; margin-bottom: 1rem; border-bottom: 2px solid #F4B183; padding-bottom: 0.5rem;">
-    📋 PICK LIST PREVIEW
-    </div>
-    <div style="margin-bottom: 1rem;">
-        <strong>ORDER #:</strong> {order_number}<br>
-        <strong>CUSTOMER:</strong> {customer_name if customer_name else '[Not specified]'}<br>
-        <strong>PROJECT:</strong> {project_name if project_name else '[Not specified]'}<br>
-        <strong>TESTS ORDERED:</strong> {', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules])}
-    </div>
-    <div style="background-color: white; padding: 1rem; border-radius: 5px; margin: 1rem 0;">
-    <strong>COMPONENTS TO PICK:</strong><br>
+    <strong>ORDER:</strong> {order_number} | <strong>CUSTOMER:</strong> {customer_name if customer_name else 'N/A'}<br>
+    <strong>TESTS:</strong> {', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules])}<br><br>
+    <strong>COMPONENTS:</strong><br>
     """, unsafe_allow_html=True)
     
-    for idx, item in enumerate(pick_list_items, start=1):
-        item_line = f"☐ {item['item']}"
-        if item['qty'] > 1:
-            item_line += f" × {item['qty']}"
-        item_line += f" [{item['location']}]"
-        
-        st.markdown(f"<div style='margin: 0.3rem 0; font-family: monospace;'>{item_line}</div>", unsafe_allow_html=True)
+    for item in pick_list_items:
+        st.markdown(f"☐ {item['item']} × {item['qty']} [{item['location']}]<br>", unsafe_allow_html=True)
     
     if special_notes:
-        st.markdown("<br><strong style='color: #C00000;'>⚠️ SPECIAL NOTES:</strong><br>", unsafe_allow_html=True)
+        st.markdown("<br><strong style='color: red;'>⚠️ SPECIAL NOTES:</strong><br>", unsafe_allow_html=True)
         for note in special_notes:
-            st.markdown(f"<div style='color: #C00000; margin: 0.5rem 0;'>{note}</div>", unsafe_allow_html=True)
+            st.markdown(f"• {note}<br>", unsafe_allow_html=True)
     
-    st.markdown(f"""
-        </div>
-        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ccc;">
-            <strong>TOTAL ASSEMBLY TIME:</strong> ~7 minutes<br>
-            <strong>SHIP VIA:</strong> {SHIPPING_OPTIONS[shipping_key]['name']}<br>
-            <strong>CUSTOMER PRICE:</strong> ${customer_price:.2f}
-        </div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # Download buttons
     col_pdf, col_csv = st.columns(2)
     
     with col_pdf:
-        # Generate PDF
         order_info = {
             'order_number': order_number,
             'customer': customer_name if customer_name else '[Not specified]',
@@ -676,11 +634,11 @@ if len(selected_modules) > 0:
             'customer_price': customer_price
         }
         
-        pdf_buffer = generate_pdf_picklist(order_info, pick_list_items, special_notes, cost_info)
+        pdf_bytes = generate_pdf_picklist(order_info, pick_list_items, special_notes, cost_info)
         
         st.download_button(
             label="📄 Download PDF Pick List",
-            data=pdf_buffer,
+            data=pdf_bytes,
             file_name=f"KELP_PickList_{order_number}.pdf",
             mime="application/pdf",
             use_container_width=True,
@@ -688,7 +646,6 @@ if len(selected_modules) > 0:
         )
     
     with col_csv:
-        # Create CSV for components
         df_components = pd.DataFrame(pick_list_items)
         csv = df_components.to_csv(index=False)
         
@@ -699,55 +656,13 @@ if len(selected_modules) > 0:
             mime="text/csv",
             use_container_width=True
         )
-    
-    # Save/Clear buttons
-    st.divider()
-    col_save, col_clear = st.columns(2)
-    
-    with col_save:
-        if st.button("💾 Save Order to History", type="primary", use_container_width=True, key=get_key("save_btn")):
-            order_data = {
-                'order_number': order_number,
-                'customer': customer_name,
-                'project': project_name,
-                'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'modules': selected_modules,
-                'sharing': sharing_a_c,
-                'shipping': shipping_key,
-                'total_cost': total_cost,
-                'customer_price': customer_price,
-                'items_count': len(pick_list_items),
-                'bottles_count': bottles_count
-            }
-            st.session_state.order_history.append(order_data)
-            st.success(f"✅ Order {order_number} saved successfully!")
 
 else:
-    st.info("👆 Please select at least one test module to generate a pick list.")
-
-# Order History
-if len(st.session_state.order_history) > 0:
-    st.divider()
-    st.header("📚 Order History")
-    
-    df_history = pd.DataFrame(st.session_state.order_history)
-    df_history['modules_str'] = df_history['modules'].apply(lambda x: ', '.join([m.replace('module_', '').upper() for m in x]))
-    
-    display_df = df_history[['order_number', 'customer', 'date', 'modules_str', 'bottles_count', 'customer_price']].copy()
-    display_df.columns = ['Order #', 'Customer', 'Date', 'Modules', 'Bottles', 'Price']
-    display_df['Price'] = display_df['Price'].apply(lambda x: f"${x:.2f}")
-    
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
-    
-    if st.button("🗑️ Clear Order History", key=get_key("clear_history")):
-        st.session_state.order_history = []
-        st.rerun()
+    st.info("👆 Please select at least one test module.")
 
 # Footer
 st.divider()
 st.caption(f"""
-**KETOS Environmental Laboratory (KELP)** | Smart Kit Builder v2.0 - CORRECTED  
-✅ Sample sharing enabled | ✅ Reset button fixed | ✅ PDF generation | ✅ Field parameters removed  
-ISO/IEC 17025:2017 Compliant | TNI Accredited  
-Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+**KETOS Environmental Laboratory (KELP)** | Smart Kit Builder v2.1  
+ISO/IEC 17025:2017 | TNI Accredited | Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
 """)

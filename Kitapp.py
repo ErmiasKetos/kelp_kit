@@ -200,7 +200,7 @@ SHIPPING_OPTIONS = {
 LABOR_COST = 7.46  # 7 minutes at $63.94/hour
 
 # Header
-st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"> KELP Kit Builder</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Configure custom sampling kits with zero redundancy • Smart sample sharing</div>', unsafe_allow_html=True)
 
 # Sidebar - Order Information

@@ -1,5 +1,4 @@
 
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -210,6 +209,7 @@ with st.sidebar:
     order_number = st.text_input("Order Number", value=st.session_state.order_number)
     customer_name = st.text_input("Customer Name", placeholder="ABC Water District")
     project_name = st.text_input("Project Name", placeholder="Monthly Monitoring")
+    technician_name = st.text_input("Technician Name", placeholder="J. Smith", help="Required for audit trail and traceability")
     
     st.divider()
     
@@ -452,6 +452,7 @@ if len(selected_modules) > 0:
             <strong>ORDER #:</strong> {order_number}<br>
             <strong>CUSTOMER:</strong> {customer_name if customer_name else '[Not specified]'}<br>
             <strong>PROJECT:</strong> {project_name if project_name else '[Not specified]'}<br>
+            <strong>TECHNICIAN:</strong> {technician_name if technician_name else '[Not specified]'}<br>
             <strong>DATE:</strong> {datetime.now().strftime('%B %d, %Y - %I:%M %p')}<br>
             <strong>TESTS ORDERED:</strong> {', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules])}
         </div>
@@ -495,6 +496,7 @@ KELP SAMPLING KIT - PICK LIST
 ORDER #: {order_number}
 CUSTOMER: {customer_name if customer_name else '[Not specified]'}
 PROJECT: {project_name if project_name else '[Not specified]'}
+TECHNICIAN: {technician_name if technician_name else '[Not specified]'}
 DATE: {datetime.now().strftime('%B %d, %Y - %I:%M %p')}
 TESTS ORDERED: {', '.join([COMPONENT_LIBRARY[m]['name'].split(':')[1].strip() for m in selected_modules])}
 
@@ -560,6 +562,7 @@ QC Review: __________________ Date: __________
                 'order_number': order_number,
                 'customer': customer_name,
                 'project': project_name,
+                'technician': technician_name,
                 'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'modules': selected_modules,
                 'sharing': sharing_a_c,
@@ -587,8 +590,8 @@ if len(st.session_state.order_history) > 0:
     df_history = pd.DataFrame(st.session_state.order_history)
     df_history['modules_str'] = df_history['modules'].apply(lambda x: ', '.join([m.replace('module_', '').upper() for m in x]))
     
-    display_df = df_history[['order_number', 'customer', 'date', 'modules_str', 'shipping', 'customer_price']].copy()
-    display_df.columns = ['Order #', 'Customer', 'Date', 'Modules', 'Shipping', 'Price']
+    display_df = df_history[['order_number', 'customer', 'technician', 'date', 'modules_str', 'shipping', 'customer_price']].copy()
+    display_df.columns = ['Order #', 'Customer', 'Technician', 'Date', 'Modules', 'Shipping', 'Price']
     display_df['Price'] = display_df['Price'].apply(lambda x: f"${x:.2f}")
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -600,8 +603,7 @@ if len(st.session_state.order_history) > 0:
 # Footer
 st.divider()
 st.caption(f"""
-**KETOS Environmental Laboratory (KELP)** | Smart Kit Builder  
-✅ Sample sharing enabled | ✅ Reset button fixed | ✅ Text downloads only  
+**KETOS Environmental Laboratory (KELP)** | Kit Builder  
 ISO/IEC 17025:2017 Compliant | TNI Accredited  
 Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
 """)

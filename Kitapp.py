@@ -1,3 +1,29 @@
+#!/usr/bin/env python3
+"""
+KELP Smart Kit Builder - COMPLETE UPDATED VERSION
+With Multi-Package Support and No Markup Pricing
+
+VERSION: 2.1 (Updated December 2025)
+
+NEW FEATURES:
+- Multi-package support (max 2 bottles per package)
+- Automatic package splitting for orders with >2 bottles
+- Per-package shipping cost calculation
+- Labor cost excluded from price (but mentioned)
+- Real-time FedEx rate calculation
+- Smart bottle sharing (A+C modules)
+- Automatic label generation
+- Pick list with multi-package notes
+- Accordion-style module selection UI
+- Direct cost pricing (no markup)
+
+CRITICAL RULES:
+1. KELP kit box can only hold 2 bottles maximum
+2. Orders with >2 bottles split into multiple packages
+3. Each package gets own FedEx rate
+4. Labor cost NOT included in customer price
+5. Customer price = actual cost (no markup)
+"""
 
 import streamlit as st
 import pandas as pd
@@ -25,24 +51,25 @@ class FedExAPI:
     Complete FedEx API Integration
     Handles authentication, rate calculation, label generation, and address validation
     
+    UPDATED: Now supports multi-package rate calculation
     """
     
     def __init__(self):
         # Get credentials from Streamlit secrets (or set empty for demo mode)
+        # IMPORTANT: FedEx no longer issues Meter Numbers for new integrations
+        # Use OAuth with Client ID + Client Secret + Account Number only
         try:
-            self.api_key = st.secrets.get("FEDEX_API_KEY", "")
-            self.secret_key = st.secrets.get("FEDEX_SECRET_KEY", "")
+            self.api_key = st.secrets.get("FEDEX_API_KEY", "")  # Client ID
+            self.secret_key = st.secrets.get("FEDEX_SECRET_KEY", "")  # Client Secret
             self.account_number = st.secrets.get("FEDEX_ACCOUNT_NUMBER", "")
-            self.meter_number = st.secrets.get("FEDEX_METER_NUMBER", "")
         except:
             # If secrets file doesn't exist at all
             self.api_key = ""
             self.secret_key = ""
             self.account_number = ""
-            self.meter_number = ""
         
-        # Demo mode if no credentials
-        self.demo_mode = not all([self.api_key, self.secret_key, self.account_number, self.meter_number])
+        # Demo mode if no credentials (NO METER NUMBER REQUIRED)
+        self.demo_mode = not all([self.api_key, self.secret_key, self.account_number])
         
         # API endpoints
         try:
@@ -82,7 +109,20 @@ class FedExAPI:
         self.auth_failed = False
         
         if self.demo_mode:
-            st.sidebar.info("ℹ️ **FedEx Demo Mode**\n\nUsing estimated rates. Add credentials to `.streamlit/secrets.toml` for live FedEx integration.")
+            st.sidebar.info("""
+            ℹ️ **FedEx Demo Mode**
+            
+            Using estimated rates. To enable live FedEx integration:
+            
+            1. Register at FedEx Developer Portal
+            2. Get your Client ID & Client Secret
+            3. Add to `.streamlit/secrets.toml`:
+               - FEDEX_API_KEY (Client ID)
+               - FEDEX_SECRET_KEY (Client Secret)  
+               - FEDEX_ACCOUNT_NUMBER
+            
+            **Note:** Meter Number is NOT required for new integrations.
+            """)
     
     def authenticate(self) -> bool:
         """Authenticate with FedEx and get OAuth token"""
@@ -119,13 +159,15 @@ class FedExAPI:
                 Status Code: {response.status_code}
                 
                 **Troubleshooting:**
-                1. Verify your API Key and Secret Key in `.streamlit/secrets.toml`
-                2. Check that your FedEx account is active
-                3. **Meter Number Issue:** If meter number is "987654321" (1-9 backwards), this is a placeholder:
-                   - Call FedEx Technical Support: 1-877-339-2774
-                   - Request your actual meter number
-                   - Update in secrets.toml
-                4. Try using sandbox environment first
+                1. Verify your Client ID (API Key) in `.streamlit/secrets.toml`
+                2. Verify your Client Secret in `.streamlit/secrets.toml`
+                3. Verify your Shipping Account Number
+                4. Check that your FedEx account is active
+                5. Ensure you're using credentials from FedEx Developer Portal
+                6. Try using sandbox environment first (set FEDEX_ENVIRONMENT="sandbox")
+                
+                **Note:** FedEx no longer issues Meter Numbers for new integrations.
+                Only Client ID, Client Secret, and Account Number are required.
                 
                 **Demo Mode:** App will continue with estimated rates.
                 """)
@@ -340,6 +382,13 @@ class FedExAPI:
             st.error(f"Error generating label: {str(e)}")
             return None
 
+# ============================================================================
+# END OF PART 1
+# ============================================================================
+# ============================================================================
+# PART 2: COMPONENT LIBRARY AND HELPER FUNCTIONS
+# ============================================================================
+
 # Component library with pricing and specifications
 COMPONENT_LIBRARY = {
     'base': {
@@ -408,6 +457,10 @@ COMPONENT_LIBRARY = {
 LABOR_COST = 7.46  # 7 minutes at $63.94/hour (NOT included in price)
 ASSEMBLY_TIME_MINUTES = 7  # Base assembly time per package
 # NO MARKUP - Customer pays actual cost only
+
+# ============================================================================
+# HELPER FUNCTIONS - UPDATED FOR MULTI-PACKAGE SUPPORT
+# ============================================================================
 
 def calculate_package_weight(selected_modules: List[str], bottle_count: int) -> Tuple[float, int]:
     """
@@ -709,6 +762,13 @@ def calculate_total_shipping_cost(fedex_api: FedExAPI, destination: Dict,
     
     return None
 
+# ============================================================================
+# END OF PART 2
+# ============================================================================
+# ============================================================================
+# PART 3: CSS STYLING AND SESSION STATE
+# ============================================================================
+
 # Custom CSS for professional styling
 st.markdown("""
 <style>
@@ -903,6 +963,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ============================================================================
+# SESSION STATE INITIALIZATION
+# ============================================================================
 
 # Initialize session state variables
 if 'modules_selected' not in st.session_state:
@@ -923,9 +986,12 @@ if 'fedex_api' not in st.session_state:
 if 'show_costs' not in st.session_state:
     st.session_state.show_costs = False  # Hide internal costs by default
 
+# ============================================================================
+# HEADER AND TITLE
+# ============================================================================
 
 # Header
-st.title("🧪 KELP Kit Builder ")
+st.title("🧪 KELP Smart Kit Builder Pro")
 st.markdown("""
 **Intelligent Water Testing Kit Configuration System**  
 *With Multi-Package Support & Direct Cost Pricing*
@@ -939,6 +1005,7 @@ st.markdown("""
 - 💰 **Direct Cost Pricing** - No markup, pay actual cost only
 - 📋 **Automated Pick Lists** - Assembly instructions for lab staff
 - 🏷️ **Label Generation** - Automatic FedEx shipping labels
+- 🎨 **Accordion UI** - Clean, expandable module selection
 """)
 
 st.divider()
@@ -951,6 +1018,12 @@ with col_toggle2:
 # Define modules to show (excluding Microbiology)
 modules_to_show = ['module_a', 'module_b', 'module_c', 'module_d', 'module_p']
 
+# ============================================================================
+# END OF PART 3
+# ============================================================================
+# ============================================================================
+# PART 4: SIDEBAR - ADDRESS INPUT AND CONTROLS
+# ============================================================================
 
 with st.sidebar:
     st.header("📍 Shipping Configuration")
@@ -1042,12 +1115,16 @@ with st.sidebar:
             if packages > 1:
                 st.warning(f"⚠️ {packages} packages needed")
 
-
+# ============================================================================
+# MAIN CONTENT AREA
+# ============================================================================
 
 # Create two columns for layout
 col_modules, col_summary = st.columns([2, 1])
 
-
+# ============================================================================
+# LEFT COLUMN: MODULE SELECTION
+# ============================================================================
 
 with col_modules:
     st.header("1️⃣ Select Test Modules")
@@ -1201,6 +1278,12 @@ with col_modules:
         st.info("📦 Includes insulated cooler and ice packs for temperature-sensitive samples (+5 lbs per package)")
 
 
+# ============================================================================
+# END OF PART 4
+# ============================================================================
+# ============================================================================
+# PART 5: SHIPPING CALCULATION WITH MULTI-PACKAGE SUPPORT
+# ============================================================================
 
 st.header("2️⃣ Calculate Shipping Rate")
 
@@ -1318,6 +1401,9 @@ else:
 
 st.divider()
 
+# ============================================================================
+# RIGHT COLUMN: COST SUMMARY (WITH LABOR EXCLUSION)
+# ============================================================================
 
 with col_summary:
     st.header("💰 Cost Summary")
@@ -1400,6 +1486,12 @@ with col_summary:
     else:
         st.info("Select modules to see cost summary")
 
+# ============================================================================
+# END OF PART 5
+# ============================================================================
+# ============================================================================
+# PART 6: PICK LIST AND LABEL GENERATION
+# ============================================================================
 
 st.header("3️⃣ Generate Pick List")
 
@@ -1450,6 +1542,9 @@ else:
 
 st.divider()
 
+# ============================================================================
+# GENERATE SHIPPING LABELS
+# ============================================================================
 
 st.header("4️⃣ Generate Shipping Labels")
 
@@ -1543,6 +1638,9 @@ else:
 
 st.divider()
 
+# ============================================================================
+# ORDER COMPLETION
+# ============================================================================
 
 st.header("5️⃣ Complete Order")
 
@@ -1615,6 +1713,9 @@ if selected_modules and st.session_state.shipping_rate:
 else:
     st.info("💡 Complete module selection and shipping calculation to finalize order")
 
+# ============================================================================
+# ORDER HISTORY
+# ============================================================================
 
 if st.session_state.order_history:
     st.divider()
@@ -1658,13 +1759,16 @@ if st.session_state.order_history:
             use_container_width=True
         )
 
-
+# ============================================================================
+# FOOTER
+# ============================================================================
 
 st.divider()
 
 st.markdown("""
 ---
-**KELP Smart Kit Builder** | Multi-Package Support | Direct Cost Pricing | December 2025  
+**KELP Smart Kit Builder Pro v2.1** | Multi-Package Support | Direct Cost Pricing | December 2025  
+*Powered by FedEx API Integration*
 
 **System Features:**
 - ✅ Smart bottle sharing (Module A + C)
@@ -1687,3 +1791,7 @@ st.markdown("""
 
 ---
 """)
+
+# ============================================================================
+# END OF PART 6 - COMPLETE APP
+# ============================================================================

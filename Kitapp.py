@@ -122,7 +122,22 @@ class FedExAPI:
                 return True
             elif response.status_code == 403:
                 # Invalid credentials - switch to demo mode
-                st.warning("⚠️ **FedEx credentials invalid** - Switching to Demo Mode\n\nPlease check your API credentials in `.streamlit/secrets.toml`")
+                st.warning("""
+                ⚠️ **FedEx Authentication Failed (403 Forbidden)**
+                
+                **Common Issues:**
+                1. **API Key/Secret incorrect** - Double-check credentials
+                2. **Meter Number invalid** - Get from FedEx account (NOT developer portal)
+                3. **Account not activated** - Contact FedEx to activate shipping account
+                4. **Environment mismatch** - Using production keys with sandbox URL (or vice versa)
+                
+                **What to do:**
+                - Verify API Key & Secret from https://developer.fedex.com/
+                - Get Account Number & Meter Number from your FedEx shipping account
+                - Call FedEx Support: 1-877-339-2774
+                
+                **App is now using Demo Mode with estimated rates.**
+                """)
                 self.demo_mode = True
                 self.auth_failed = True
                 return False
@@ -532,20 +547,6 @@ COMPONENT_LIBRARY = {
         'preservation': 'PFAS-certified (unacidified)',
         'can_share': False
     },
-    'module_m': {
-        'name': 'MODULE M: Microbiology',
-        'description': 'Total Coliform, E. coli',
-        'cost': 2.50,
-        'weight_lbs': 0.2,
-        'items': [
-            {'item': '100mL sterile bottle', 'qty': 1, 'cost': 2.00, 'pn': 'Bottle_Sterile', 'location': 'Shelf B5'},
-            {'item': 'Sodium thiosulfate tablet', 'qty': 1, 'cost': 0.50, 'pn': 'Pres_Thio', 'location': 'Shelf D3'},
-        ],
-        'color': '#A5A5A5',
-        'tests': ['Total Coliform', 'E. coli', 'Fecal Coliform'],
-        'preservation': 'Sodium thiosulfate',
-        'can_share': False
-    },
 }
 
 LABOR_COST = 7.46  # 7 minutes at $63.94/hour
@@ -757,6 +758,16 @@ with st.sidebar:
             "postalCode": zipcode,
             "countryCode": "US"
         }
+        # Show confirmation
+        st.success(f"✅ Address captured: {city}, {state.upper()} {zipcode}")
+    elif address1 or city or state or zipcode:
+        # Some fields filled but not all
+        missing = []
+        if not address1: missing.append("Street Address")
+        if not city: missing.append("City")
+        if not state: missing.append("State")
+        if not zipcode: missing.append("ZIP Code")
+        st.warning(f"⚠️ Missing: {', '.join(missing)}")
     
     st.divider()
     
@@ -781,7 +792,7 @@ with st.sidebar:
 # ============================================================================
 
 st.header("1️⃣ Select Test Modules")
-modules_to_show = ['module_a', 'module_b', 'module_c', 'module_d', 'module_p', 'module_m']
+modules_to_show = ['module_a', 'module_b', 'module_c', 'module_d', 'module_p']
 
 # Create two columns for layout
 col_modules, col_summary = st.columns([2, 1])
@@ -861,7 +872,12 @@ if selected_modules:
             (" (includes cooler & ice)" if is_compliance else ""))
     
     # Check if address is provided for FedEx rate calculation
-    if st.session_state.shipping_address:
+    has_address = (st.session_state.shipping_address and 
+                   'city' in st.session_state.shipping_address and 
+                   'stateOrProvinceCode' in st.session_state.shipping_address and 
+                   'postalCode' in st.session_state.shipping_address)
+    
+    if has_address:
         if st.button("🔄 Get Real-Time Shipping Rate from FedEx", type="primary"):
             with st.spinner("Contacting FedEx API..."):
                 service_type = get_fedex_service_type(is_compliance)
@@ -893,7 +909,7 @@ if selected_modules:
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("💡 Enter shipping address in the sidebar to get real-time FedEx rates")
+        st.info("💡 **Enter complete shipping address in the sidebar:**\n- Street Address\n- City\n- State\n- ZIP Code")
 
 else:
     st.warning("⚠️ Please select at least one test module")

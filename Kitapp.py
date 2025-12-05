@@ -41,16 +41,27 @@ class FedExAPI:
     
     def __init__(self):
         # Get credentials from Streamlit secrets (or set empty for demo mode)
-        self.api_key = st.secrets.get("FEDEX_API_KEY", "")
-        self.secret_key = st.secrets.get("FEDEX_SECRET_KEY", "")
-        self.account_number = st.secrets.get("FEDEX_ACCOUNT_NUMBER", "")
-        self.meter_number = st.secrets.get("FEDEX_METER_NUMBER", "")
+        try:
+            self.api_key = st.secrets.get("FEDEX_API_KEY", "")
+            self.secret_key = st.secrets.get("FEDEX_SECRET_KEY", "")
+            self.account_number = st.secrets.get("FEDEX_ACCOUNT_NUMBER", "")
+            self.meter_number = st.secrets.get("FEDEX_METER_NUMBER", "")
+        except:
+            # If secrets file doesn't exist at all
+            self.api_key = ""
+            self.secret_key = ""
+            self.account_number = ""
+            self.meter_number = ""
         
         # Demo mode if no credentials
         self.demo_mode = not all([self.api_key, self.secret_key, self.account_number, self.meter_number])
         
         # API endpoints
-        env = st.secrets.get("FEDEX_ENVIRONMENT", "production")
+        try:
+            env = st.secrets.get("FEDEX_ENVIRONMENT", "production")
+        except:
+            env = "production"
+            
         if env == "sandbox":
             self.base_url = "https://apis-sandbox.fedex.com"
         else:
@@ -62,18 +73,28 @@ class FedExAPI:
         self.address_url = f"{self.base_url}/address/v1/addresses/resolve"
         
         # KELP origin address
-        self.origin = {
-            "streetLines": [st.secrets.get("LAB_STREET", "123 Innovation Way")],
-            "city": st.secrets.get("LAB_CITY", "Sunnyvale"),
-            "stateOrProvinceCode": st.secrets.get("LAB_STATE", "CA"),
-            "postalCode": st.secrets.get("LAB_ZIP", "94085"),
-            "countryCode": "US"
-        }
+        try:
+            self.origin = {
+                "streetLines": [st.secrets.get("LAB_STREET", "123 Innovation Way")],
+                "city": st.secrets.get("LAB_CITY", "Sunnyvale"),
+                "stateOrProvinceCode": st.secrets.get("LAB_STATE", "CA"),
+                "postalCode": st.secrets.get("LAB_ZIP", "94085"),
+                "countryCode": "US"
+            }
+        except:
+            self.origin = {
+                "streetLines": ["123 Innovation Way"],
+                "city": "Sunnyvale",
+                "stateOrProvinceCode": "CA",
+                "postalCode": "94085",
+                "countryCode": "US"
+            }
         
         self.access_token = None
+        self.auth_failed = False
         
         if self.demo_mode:
-            st.sidebar.warning("⚠️ FedEx Demo Mode - Using estimated rates")
+            st.sidebar.info("ℹ️ **FedEx Demo Mode**\n\nUsing estimated rates. Add credentials to `.streamlit/secrets.toml` for live FedEx integration.")
     
     def authenticate(self) -> bool:
         """Authenticate with FedEx and get OAuth token"""
@@ -97,13 +118,24 @@ class FedExAPI:
             if response.status_code == 200:
                 data = response.json()
                 self.access_token = data.get("access_token")
+                self.auth_failed = False
                 return True
+            elif response.status_code == 403:
+                # Invalid credentials - switch to demo mode
+                st.warning("⚠️ **FedEx credentials invalid** - Switching to Demo Mode\n\nPlease check your API credentials in `.streamlit/secrets.toml`")
+                self.demo_mode = True
+                self.auth_failed = True
+                return False
             else:
-                st.error(f"❌ FedEx authentication failed: {response.status_code}")
+                st.warning(f"⚠️ **FedEx authentication failed** ({response.status_code}) - Using Demo Mode\n\nUsing estimated rates instead of live FedEx rates.")
+                self.demo_mode = True
+                self.auth_failed = True
                 return False
                 
         except Exception as e:
-            st.error(f"❌ FedEx API error: {str(e)}")
+            st.warning(f"⚠️ **Cannot connect to FedEx** - Using Demo Mode\n\nError: {str(e)}\n\nUsing estimated rates.")
+            self.demo_mode = True
+            self.auth_failed = True
             return False
     
     def validate_address(self, address: Dict) -> Tuple[bool, Optional[Dict]]:

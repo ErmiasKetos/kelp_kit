@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-KELP Smart Kit Builder - Enhanced Streamlit Application
+KELP Smart Kit Builder - COMPLETE Enhanced Streamlit Application
 With FedEx API Integration for Dynamic Shipping & Label Generation
 
-New Features:
+Features:
 - Real-time FedEx rate calculation based on destination
-- Automatic shipping label generation
+- Automatic shipping label generation  
 - Address validation
 - Tracking number assignment
+- Smart bottle sharing (A+C modules)
+- Pick list generation
+- Order history export
 """
 
 import streamlit as st
@@ -15,59 +18,68 @@ import pandas as pd
 from datetime import datetime
 import json
 import requests
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 import base64
 
 # Page configuration
 st.set_page_config(
-    page_title="KELP Kit Builder",
+    page_title="KELP Kit Builder Pro",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ============================================================================
-# FEDEX API CONFIGURATION
+# FEDEX API INTEGRATION CLASS
 # ============================================================================
 
 class FedExAPI:
     """
-    FedEx API Integration for rate calculation and label generation
-    
-    Documentation: https://developer.fedex.com/api/en-us/
+    Complete FedEx API Integration
+    Handles authentication, rate calculation, label generation, and address validation
     """
     
     def __init__(self):
-        # FedEx API credentials (store securely in environment variables)
+        # Get credentials from Streamlit secrets (or set empty for demo mode)
         self.api_key = st.secrets.get("FEDEX_API_KEY", "")
         self.secret_key = st.secrets.get("FEDEX_SECRET_KEY", "")
         self.account_number = st.secrets.get("FEDEX_ACCOUNT_NUMBER", "")
         self.meter_number = st.secrets.get("FEDEX_METER_NUMBER", "")
         
+        # Demo mode if no credentials
+        self.demo_mode = not all([self.api_key, self.secret_key, self.account_number, self.meter_number])
+        
         # API endpoints
-        self.base_url = "https://apis.fedex.com"
+        env = st.secrets.get("FEDEX_ENVIRONMENT", "production")
+        if env == "sandbox":
+            self.base_url = "https://apis-sandbox.fedex.com"
+        else:
+            self.base_url = "https://apis.fedex.com"
+            
         self.auth_url = f"{self.base_url}/oauth/token"
         self.rate_url = f"{self.base_url}/rate/v1/rates/quotes"
         self.ship_url = f"{self.base_url}/ship/v1/shipments"
+        self.address_url = f"{self.base_url}/address/v1/addresses/resolve"
         
-        # KELP origin address (Sunnyvale, CA)
+        # KELP origin address
         self.origin = {
-            "streetLines": ["123 Innovation Way"],
-            "city": "Sunnyvale",
-            "stateOrProvinceCode": "CA",
-            "postalCode": "94085",
+            "streetLines": [st.secrets.get("LAB_STREET", "123 Innovation Way")],
+            "city": st.secrets.get("LAB_CITY", "Sunnyvale"),
+            "stateOrProvinceCode": st.secrets.get("LAB_STATE", "CA"),
+            "postalCode": st.secrets.get("LAB_ZIP", "94085"),
             "countryCode": "US"
         }
         
         self.access_token = None
+        
+        if self.demo_mode:
+            st.sidebar.warning("⚠️ FedEx Demo Mode - Using estimated rates")
     
     def authenticate(self) -> bool:
-        """
-        Authenticate with FedEx API and get access token
-        
-        Returns:
-            bool: True if authentication successful
-        """
+        """Authenticate with FedEx and get OAuth token"""
+        if self.demo_mode:
+            return True
+            
         try:
             payload = {
                 "grant_type": "client_credentials",
@@ -78,7 +90,8 @@ class FedExAPI:
             response = requests.post(
                 self.auth_url,
                 data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=10
             )
             
             if response.status_code == 200:
@@ -86,107 +99,91 @@ class FedExAPI:
                 self.access_token = data.get("access_token")
                 return True
             else:
-                st.error(f"FedEx authentication failed: {response.text}")
+                st.error(f"❌ FedEx authentication failed: {response.status_code}")
                 return False
                 
         except Exception as e:
-            st.error(f"FedEx authentication error: {str(e)}")
+            st.error(f"❌ FedEx API error: {str(e)}")
             return False
     
     def validate_address(self, address: Dict) -> Tuple[bool, Optional[Dict]]:
-        """
-        Validate customer address
-        
-        Args:
-            address: Dict with streetLines, city, stateOrProvinceCode, postalCode, countryCode
+        """Validate address with FedEx"""
+        if self.demo_mode:
+            return True, address
             
-        Returns:
-            Tuple of (is_valid, validated_address)
-        """
-        # FedEx Address Validation API endpoint
-        url = f"{self.base_url}/address/v1/addresses/resolve"
-        
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "addressesToValidate": [
-                {
-                    "address": address
-                }
-            ]
-        }
+        if not self.access_token:
+            if not self.authenticate():
+                return True, address  # Proceed anyway
         
         try:
-            response = requests.post(url, json=payload, headers=headers)
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "addressesToValidate": [{
+                    "address": address
+                }]
+            }
+            
+            response = requests.post(
+                self.address_url,
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                
-                # Check if address is valid
                 if data.get("output", {}).get("resolvedAddresses"):
                     validated = data["output"]["resolvedAddresses"][0]
-                    return True, validated.get("resolvedAddress")
-                else:
-                    return False, None
-            else:
-                return False, None
-                
+                    return True, validated.get("resolvedAddress", address)
+            
+            return True, address  # Use original if validation fails
+            
         except Exception as e:
-            st.warning(f"Address validation error: {str(e)}")
-            return True, address  # Proceed with original address if validation fails
+            st.warning(f"⚠️ Address validation unavailable: {str(e)}")
+            return True, address
     
     def calculate_shipping_rate(
-        self, 
+        self,
         destination: Dict,
         weight_lbs: float,
         service_type: str = "FEDEX_GROUND",
         is_compliance: bool = False
     ) -> Optional[Dict]:
-        """
-        Calculate shipping rate using FedEx API
+        """Calculate real-time shipping rate from FedEx"""
         
-        Args:
-            destination: Destination address dict
-            weight_lbs: Package weight in pounds
-            service_type: FedEx service type (FEDEX_GROUND, FEDEX_2_DAY, etc.)
-            is_compliance: If True, includes cooler and ice packs
-            
-        Returns:
-            Dict with rate information or None if error
-        """
+        # Adjust weight for compliance (cooler + ice)
+        if is_compliance:
+            weight_lbs += 5.0
+        
+        # Demo mode: return estimated rates
+        if self.demo_mode:
+            return self._get_demo_rate(destination, weight_lbs, service_type, is_compliance)
+        
+        # Real FedEx API call
         if not self.access_token:
             if not self.authenticate():
-                return None
+                return self._get_demo_rate(destination, weight_lbs, service_type, is_compliance)
         
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json"
-        }
-        
-        # Adjust weight for compliance shipping (add cooler + ice)
-        if is_compliance:
-            weight_lbs += 5.0  # Cooler and ice packs add ~5 lbs
-        
-        payload = {
-            "accountNumber": {
-                "value": self.account_number
-            },
-            "requestedShipment": {
-                "shipper": {
-                    "address": self.origin
-                },
-                "recipient": {
-                    "address": destination
-                },
-                "pickupType": "USE_SCHEDULED_PICKUP",
-                "serviceType": service_type,
-                "packagingType": "YOUR_PACKAGING",
-                "rateRequestType": ["ACCOUNT"],
-                "requestedPackageLineItems": [
-                    {
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "accountNumber": {"value": self.account_number},
+                "requestedShipment": {
+                    "shipper": {"address": self.origin},
+                    "recipient": {"address": destination},
+                    "pickupType": "USE_SCHEDULED_PICKUP",
+                    "serviceType": service_type,
+                    "packagingType": "YOUR_PACKAGING",
+                    "rateRequestType": ["ACCOUNT"],
+                    "requestedPackageLineItems": [{
                         "weight": {
                             "units": "LB",
                             "value": weight_lbs
@@ -197,49 +194,99 @@ class FedExAPI:
                             "height": 8,
                             "units": "IN"
                         }
-                    }
-                ]
+                    }]
+                }
             }
-        }
-        
-        try:
-            response = requests.post(self.rate_url, json=payload, headers=headers)
+            
+            response = requests.post(
+                self.rate_url,
+                json=payload,
+                headers=headers,
+                timeout=15
+            )
             
             if response.status_code == 200:
                 data = response.json()
                 
-                # Extract rate details
                 if data.get("output", {}).get("rateReplyDetails"):
                     rate_detail = data["output"]["rateReplyDetails"][0]
                     
-                    # Get total charges
+                    # Extract total charge
                     total_charge = 0
                     for charge in rate_detail.get("ratedShipmentDetails", []):
                         if charge.get("rateType") == "ACCOUNT":
-                            total_charge = float(
-                                charge.get("totalNetCharge", 0)
-                            )
+                            total_charge = float(charge.get("totalNetCharge", 0))
                             break
                     
                     return {
                         "service_type": rate_detail.get("serviceType"),
-                        "service_name": rate_detail.get("serviceName"),
+                        "service_name": rate_detail.get("serviceName", service_type),
                         "total_charge": total_charge,
                         "currency": "USD",
                         "delivery_date": rate_detail.get("deliveryTimestamp"),
-                        "transit_time": rate_detail.get("transitTime")
+                        "transit_time": rate_detail.get("transitTime", "N/A")
                     }
-                else:
-                    st.error("No rates returned from FedEx")
-                    return None
-                    
-            else:
-                st.error(f"FedEx rate request failed: {response.text}")
-                return None
-                
+            
+            # Fallback to demo rate if API fails
+            return self._get_demo_rate(destination, weight_lbs, service_type, is_compliance)
+            
         except Exception as e:
-            st.error(f"Shipping rate calculation error: {str(e)}")
-            return None
+            st.warning(f"⚠️ Using estimated rate: {str(e)}")
+            return self._get_demo_rate(destination, weight_lbs, service_type, is_compliance)
+    
+    def _get_demo_rate(self, destination: Dict, weight_lbs: float, service_type: str, is_compliance: bool) -> Dict:
+        """Generate estimated shipping rate (demo mode or fallback)"""
+        
+        # Base rate by weight
+        if weight_lbs <= 3:
+            base_rate = 8.00
+        elif weight_lbs <= 5:
+            base_rate = 12.00
+        elif weight_lbs <= 10:
+            base_rate = 18.00
+        else:
+            base_rate = 25.00
+        
+        # Adjust for service type
+        if "2_DAY" in service_type or is_compliance:
+            base_rate *= 3.5  # 2-day is ~3.5x ground
+        
+        # Adjust for destination (rough estimates)
+        state = destination.get("stateOrProvinceCode", "CA")
+        
+        # Distance multipliers
+        west_coast = ["CA", "OR", "WA", "NV", "AZ"]
+        mountain = ["UT", "CO", "NM", "ID", "MT", "WY"]
+        
+        if state in west_coast:
+            multiplier = 1.0
+        elif state in mountain:
+            multiplier = 1.3
+        else:
+            multiplier = 1.6  # East coast / central
+        
+        total_charge = base_rate * multiplier
+        
+        # Transit time estimate
+        if "2_DAY" in service_type:
+            transit = "2 business days"
+        elif state == "CA":
+            transit = "1-2 business days"
+        elif state in west_coast:
+            transit = "2-3 business days"
+        elif state in mountain:
+            transit = "3-4 business days"
+        else:
+            transit = "4-5 business days"
+        
+        return {
+            "service_type": service_type,
+            "service_name": "FedEx Ground (Estimated)" if "GROUND" in service_type else "FedEx 2-Day (Estimated)",
+            "total_charge": round(total_charge, 2),
+            "currency": "USD",
+            "delivery_date": None,
+            "transit_time": transit
+        }
     
     def generate_shipping_label(
         self,
@@ -250,46 +297,46 @@ class FedExAPI:
         is_compliance: bool = False,
         reference_id: str = ""
     ) -> Optional[Dict]:
-        """
-        Generate FedEx shipping label
+        """Generate FedEx shipping label with tracking"""
         
-        Args:
-            order_id: KELP order number
-            destination: Destination address
-            weight_lbs: Package weight
-            service_type: FedEx service type
-            is_compliance: Compliance shipping flag
-            reference_id: Customer reference
-            
-        Returns:
-            Dict with label data and tracking number
-        """
+        # Adjust weight
+        if is_compliance:
+            weight_lbs += 5.0
+        
+        # Demo mode: return mock label
+        if self.demo_mode:
+            return {
+                "tracking_number": f"DEMO{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                "label_url": "https://www.fedex.com/content/dam/fedex/us-united-states/shipping/images/2022/Q3/sample-fedex-express-shipping-label-domestic.png",
+                "master_tracking_number": f"DEMO{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                "service_type": service_type,
+                "shipment_date": datetime.now().strftime("%Y-%m-%d"),
+                "demo_mode": True
+            }
+        
+        # Real FedEx API call
         if not self.access_token:
             if not self.authenticate():
                 return None
         
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json"
-        }
-        
-        # Adjust weight for compliance
-        if is_compliance:
-            weight_lbs += 5.0
-        
-        payload = {
-            "labelResponseOptions": "URL_ONLY",
-            "requestedShipment": {
-                "shipper": {
-                    "contact": {
-                        "personName": "KELP Environmental Lab",
-                        "phoneNumber": "4085551234",
-                        "companyName": "KETOS Environmental Lab Platform"
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "labelResponseOptions": "URL_ONLY",
+                "requestedShipment": {
+                    "shipper": {
+                        "contact": {
+                            "personName": st.secrets.get("LAB_CONTACT", "Lab Manager"),
+                            "phoneNumber": st.secrets.get("LAB_PHONE", "408-555-1234"),
+                            "companyName": st.secrets.get("LAB_NAME", "KETOS Environmental Lab Platform")
+                        },
+                        "address": self.origin
                     },
-                    "address": self.origin
-                },
-                "recipients": [
-                    {
+                    "recipients": [{
                         "contact": {
                             "personName": destination.get("contact_name", ""),
                             "phoneNumber": destination.get("phone", ""),
@@ -302,22 +349,18 @@ class FedExAPI:
                             "postalCode": destination["postalCode"],
                             "countryCode": destination.get("countryCode", "US")
                         }
-                    }
-                ],
-                "shipDatestamp": datetime.now().strftime("%Y-%m-%d"),
-                "serviceType": service_type,
-                "packagingType": "YOUR_PACKAGING",
-                "pickupType": "USE_SCHEDULED_PICKUP",
-                "blockInsightVisibility": False,
-                "shippingChargesPayment": {
-                    "paymentType": "SENDER"
-                },
-                "labelSpecification": {
-                    "imageType": "PDF",
-                    "labelStockType": "PAPER_4X6"
-                },
-                "requestedPackageLineItems": [
-                    {
+                    }],
+                    "shipDatestamp": datetime.now().strftime("%Y-%m-%d"),
+                    "serviceType": service_type,
+                    "packagingType": "YOUR_PACKAGING",
+                    "pickupType": "USE_SCHEDULED_PICKUP",
+                    "blockInsightVisibility": False,
+                    "shippingChargesPayment": {"paymentType": "SENDER"},
+                    "labelSpecification": {
+                        "imageType": "PDF",
+                        "labelStockType": "PAPER_4X6"
+                    },
+                    "requestedPackageLineItems": [{
                         "weight": {
                             "units": "LB",
                             "value": weight_lbs
@@ -328,22 +371,21 @@ class FedExAPI:
                             "height": 8,
                             "units": "IN"
                         },
-                        "customerReferences": [
-                            {
-                                "customerReferenceType": "CUSTOMER_REFERENCE",
-                                "value": f"KELP-{order_id}"
-                            }
-                        ]
-                    }
-                ]
-            },
-            "accountNumber": {
-                "value": self.account_number
+                        "customerReferences": [{
+                            "customerReferenceType": "CUSTOMER_REFERENCE",
+                            "value": f"KELP-{order_id}"
+                        }]
+                    }]
+                },
+                "accountNumber": {"value": self.account_number}
             }
-        }
-        
-        try:
-            response = requests.post(self.ship_url, json=payload, headers=headers)
+            
+            response = requests.post(
+                self.ship_url,
+                json=payload,
+                headers=headers,
+                timeout=20
+            )
             
             if response.status_code == 200:
                 data = response.json()
@@ -359,21 +401,16 @@ class FedExAPI:
                         "service_type": shipment.get("serviceType"),
                         "shipment_date": shipment.get("shipDatestamp")
                     }
-                else:
-                    st.error("No shipment created")
-                    return None
-                    
-            else:
-                st.error(f"Label generation failed: {response.text}")
-                return None
-                
+            
+            st.error(f"❌ Label generation failed: {response.status_code}")
+            return None
+            
         except Exception as e:
-            st.error(f"Label generation error: {str(e)}")
+            st.error(f"❌ Label generation error: {str(e)}")
             return None
 
-
 # ============================================================================
-# COMPONENT LIBRARY (Same as before)
+# COMPONENT LIBRARY & CONSTANTS
 # ============================================================================
 
 COMPONENT_LIBRARY = {
@@ -381,7 +418,7 @@ COMPONENT_LIBRARY = {
         'name': 'BASE COMPONENTS',
         'description': 'Included in every kit',
         'cost': 9.50,
-        'weight_lbs': 1.5,  # Added weight
+        'weight_lbs': 1.5,
         'items': [
             {'item': 'COC Form', 'qty': 1, 'cost': 0.50, 'pn': 'Form_01', 'location': 'Shelf A1'},
             {'item': 'Waterproof Labels (sheet)', 'qty': 1, 'cost': 0.50, 'pn': 'Label_01', 'location': 'Shelf A2'},
@@ -481,14 +518,14 @@ COMPONENT_LIBRARY = {
     },
 }
 
-LABOR_COST = 7.46
-MARKUP_FACTOR = 1.4
+LABOR_COST = 7.46  # 7 minutes at $63.94/hour
+MARKUP_FACTOR = 1.4  # 40% markup = 28.6% profit margin
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
-def calculate_package_weight(selected_modules: list) -> float:
+def calculate_package_weight(selected_modules: List[str]) -> float:
     """Calculate total package weight in pounds"""
     weight = COMPONENT_LIBRARY['base']['weight_lbs']
     
@@ -500,29 +537,84 @@ def calculate_package_weight(selected_modules: list) -> float:
 
 
 def get_fedex_service_type(is_compliance: bool) -> str:
-    """Get FedEx service type based on shipping option"""
+    """Get FedEx service type code"""
+    return "FEDEX_2_DAY" if is_compliance else "FEDEX_GROUND"
+
+
+def count_bottles(selected_modules: List[str], sharing_active: bool) -> int:
+    """Count total number of bottles"""
+    bottles = 0
+    
+    for module_key in selected_modules:
+        if module_key == 'module_a':
+            bottles += 1
+        elif module_key == 'module_b':
+            bottles += 1
+        elif module_key == 'module_c':
+            if not sharing_active:  # Only count if NOT sharing
+                bottles += 1
+        elif module_key == 'module_d':
+            bottles += 1
+        elif module_key == 'module_p':
+            bottles += 2  # PFAS always needs 2 bottles
+        elif module_key == 'module_m':
+            bottles += 1
+    
+    return bottles
+
+
+def generate_pick_list(
+    order_id: str,
+    customer_name: str,
+    project_name: str,
+    selected_modules: List[str],
+    sharing_active: bool,
+    is_compliance: bool
+) -> pd.DataFrame:
+    """Generate pick list dataframe"""
+    
+    items = []
+    
+    # Add base components (skip standard gloves if PFAS selected)
+    has_pfas = 'module_p' in selected_modules
+    for item in COMPONENT_LIBRARY['base']['items']:
+        if has_pfas and item['item'] == 'Nitrile Gloves (pairs)':
+            continue  # Skip standard gloves, PFAS kit has upgraded gloves
+        items.append(item.copy())
+    
+    # Add module-specific items
+    for module_key in selected_modules:
+        if module_key in COMPONENT_LIBRARY:
+            module = COMPONENT_LIBRARY[module_key]
+            
+            # Skip Module C bottle if sharing with Module A
+            if module_key == 'module_c' and sharing_active:
+                items.append({
+                    'item': '⚠️ SHARED BOTTLE: Anions use SAME bottle as Gen Chem',
+                    'qty': 0,
+                    'cost': 0,
+                    'pn': 'N/A',
+                    'location': 'N/A'
+                })
+                continue
+            
+            # Add all items for this module
+            for item in module.get('items', []):
+                items.append(item.copy())
+    
+    # Add compliance shipping items
     if is_compliance:
-        return "FEDEX_2_DAY"
-    else:
-        return "FEDEX_GROUND"
+        items.extend([
+            {'item': 'Cooler Bag (12L insulated)', 'qty': 1, 'cost': 8.00, 'pn': 'Cool_01', 'location': 'Shelf F1'},
+            {'item': 'Ice Packs (4×)', 'qty': 4, 'cost': 4.00, 'pn': 'Ice_01', 'location': 'Freezer'},
+        ])
+    
+    # Create dataframe
+    df = pd.DataFrame(items)
+    df.insert(0, 'Checked', '☐')
+    
+    return df
 
-
-# ============================================================================
-# INITIALIZE SESSION STATE
-# ============================================================================
-
-if 'order_number' not in st.session_state:
-    st.session_state.order_number = f"2025-{datetime.now().strftime('%m%d')}-001"
-if 'modules_selected' not in st.session_state:
-    st.session_state.modules_selected = {'base': True}
-if 'shipping_address' not in st.session_state:
-    st.session_state.shipping_address = {}
-if 'shipping_rate' not in st.session_state:
-    st.session_state.shipping_rate = None
-if 'shipping_label' not in st.session_state:
-    st.session_state.shipping_label = None
-if 'fedex_api' not in st.session_state:
-    st.session_state.fedex_api = FedExAPI()
 
 # ============================================================================
 # CUSTOM CSS
@@ -550,6 +642,7 @@ st.markdown("""
         font-size: 1.2rem;
         font-weight: bold;
         text-align: center;
+        margin-top: 1rem;
     }
     .success-box {
         background-color: #E2F0D9;
@@ -558,8 +651,34 @@ st.markdown("""
         border-left: 4px solid #70AD47;
         margin: 1rem 0;
     }
+    .warning-box {
+        background-color: #FFF2CC;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #FFC000;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# ============================================================================
+# INITIALIZE SESSION STATE
+# ============================================================================
+
+if 'order_number' not in st.session_state:
+    st.session_state.order_number = f"KELP-{datetime.now().strftime('%Y%m%d')}-001"
+if 'modules_selected' not in st.session_state:
+    st.session_state.modules_selected = {'base': True}
+if 'shipping_address' not in st.session_state:
+    st.session_state.shipping_address = {}
+if 'shipping_rate' not in st.session_state:
+    st.session_state.shipping_rate = None
+if 'shipping_label' not in st.session_state:
+    st.session_state.shipping_label = None
+if 'fedex_api' not in st.session_state:
+    st.session_state.fedex_api = FedExAPI()
+if 'order_history' not in st.session_state:
+    st.session_state.order_history = []
 
 # ============================================================================
 # HEADER
@@ -613,18 +732,19 @@ with st.sidebar:
     
     st.header("⚙️ Settings")
     show_costs = st.checkbox("Show Internal Costs", value=True)
+    show_pick_list = st.checkbox("Show Pick List", value=False)
 
 # ============================================================================
-# MAIN CONTENT
+# MAIN CONTENT - MODULE SELECTION
 # ============================================================================
 
-# Module Selection
 st.header("1️⃣ Select Test Modules")
 modules_to_show = ['module_a', 'module_b', 'module_c', 'module_d', 'module_p', 'module_m']
 
-col1, col2 = st.columns([2, 1])
+# Create two columns for layout
+col_modules, col_summary = st.columns([2, 1])
 
-with col1:
+with col_modules:
     for module_key in modules_to_show:
         module = COMPONENT_LIBRARY[module_key]
         
@@ -653,7 +773,10 @@ with col1:
 
 st.divider()
 
-# Shipping Options
+# ============================================================================
+# SHIPPING OPTIONS
+# ============================================================================
+
 st.header("2️⃣ Select Shipping Type")
 
 col_std, col_comp = st.columns(2)
@@ -663,7 +786,7 @@ with col_std:
                  type="primary" if not st.session_state.modules_selected.get('compliance_shipping', False) else "secondary",
                  use_container_width=True):
         st.session_state.modules_selected['compliance_shipping'] = False
-        st.session_state.shipping_rate = None  # Reset rate
+        st.session_state.shipping_rate = None  # Reset rate to trigger recalculation
     st.caption("FedEx Ground (3-5 days)")
 
 with col_comp:
@@ -676,73 +799,79 @@ with col_comp:
 
 st.divider()
 
-# Calculate Shipping Rate
+# ============================================================================
+# CALCULATE SHIPPING RATE
+# ============================================================================
+
 st.header("3️⃣ Calculate Shipping Cost")
 
-if st.session_state.shipping_address:
+# Get selected modules
+selected_modules = [k for k in modules_to_show if st.session_state.modules_selected.get(k, False)]
+
+if st.session_state.shipping_address and selected_modules:
     
-    # Calculate selected modules
-    selected_modules = [k for k in modules_to_show if st.session_state.modules_selected.get(k, False)]
+    # Calculate package weight
+    package_weight = calculate_package_weight(selected_modules)
+    is_compliance = st.session_state.modules_selected.get('compliance_shipping', False)
     
-    if selected_modules:
-        # Calculate package weight
-        package_weight = calculate_package_weight(selected_modules)
-        is_compliance = st.session_state.modules_selected.get('compliance_shipping', False)
-        
-        st.info(f"📦 Estimated package weight: **{package_weight} lbs** (before cooler)" if not is_compliance else f"📦 Estimated package weight: **{package_weight + 5.0} lbs** (with cooler & ice)")
-        
-        if st.button("🔄 Get Real-Time Shipping Rate from FedEx", type="primary"):
-            with st.spinner("Contacting FedEx API..."):
-                service_type = get_fedex_service_type(is_compliance)
-                
-                rate = st.session_state.fedex_api.calculate_shipping_rate(
-                    destination=st.session_state.shipping_address,
-                    weight_lbs=package_weight,
-                    service_type=service_type,
-                    is_compliance=is_compliance
-                )
-                
-                if rate:
-                    st.session_state.shipping_rate = rate
-                    st.success("✅ Rate calculated successfully!")
-        
-        # Display rate if available
-        if st.session_state.shipping_rate:
-            rate = st.session_state.shipping_rate
+    display_weight = package_weight + 5.0 if is_compliance else package_weight
+    st.info(f"📦 Estimated package weight: **{display_weight} lbs**" + 
+            (" (includes cooler & ice)" if is_compliance else ""))
+    
+    if st.button("🔄 Get Real-Time Shipping Rate from FedEx", type="primary"):
+        with st.spinner("Contacting FedEx API..."):
+            service_type = get_fedex_service_type(is_compliance)
             
-            st.markdown(f"""
-            <div class="shipping-card">
-                <h3>📍 Shipping Details</h3>
-                <p><strong>Service:</strong> {rate['service_name']}</p>
-                <p><strong>Destination:</strong> {st.session_state.shipping_address['city']}, {st.session_state.shipping_address['stateOrProvinceCode']} {st.session_state.shipping_address['postalCode']}</p>
-                <p><strong>Transit Time:</strong> {rate.get('transit_time', 'N/A')}</p>
-                <div class="rate-display">
-                    Shipping Cost: ${rate['total_charge']:.2f}
-                </div>
+            rate = st.session_state.fedex_api.calculate_shipping_rate(
+                destination=st.session_state.shipping_address,
+                weight_lbs=package_weight,
+                service_type=service_type,
+                is_compliance=is_compliance
+            )
+            
+            if rate:
+                st.session_state.shipping_rate = rate
+                st.success("✅ Rate calculated successfully!")
+    
+    # Display rate if available
+    if st.session_state.shipping_rate:
+        rate = st.session_state.shipping_rate
+        
+        st.markdown(f"""
+        <div class="shipping-card">
+            <h3>📍 Shipping Details</h3>
+            <p><strong>Service:</strong> {rate['service_name']}</p>
+            <p><strong>Destination:</strong> {st.session_state.shipping_address['city']}, {st.session_state.shipping_address['stateOrProvinceCode']} {st.session_state.shipping_address['postalCode']}</p>
+            <p><strong>Transit Time:</strong> {rate.get('transit_time', 'N/A')}</p>
+            <div class="rate-display">
+                Shipping Cost: ${rate['total_charge']:.2f}
             </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.warning("⚠️ Please select at least one test module")
+        </div>
+        """, unsafe_allow_html=True)
+
+elif not selected_modules:
+    st.warning("⚠️ Please select at least one test module")
 else:
     st.warning("⚠️ Please enter shipping address in the sidebar")
 
 st.divider()
 
-# Cost Summary
-with col2:
+# ============================================================================
+# COST SUMMARY (in col_summary from earlier)
+# ============================================================================
+
+with col_summary:
     st.header("💰 Cost Summary")
     
     # Calculate costs with smart sharing
     material_cost = COMPONENT_LIBRARY['base']['cost']
-    selected_modules = []
     
     sharing_a_c = (st.session_state.modules_selected.get('module_a', False) and 
                    st.session_state.modules_selected.get('module_c', False))
     
     for module_key in modules_to_show:
         if st.session_state.modules_selected.get(module_key, False):
-            selected_modules.append(module_key)
-            
+            # Skip Module C cost if sharing with Module A
             if module_key == 'module_c' and sharing_a_c:
                 continue
             else:
@@ -766,8 +895,12 @@ with col2:
     margin = customer_price - total_cost
     margin_pct = (margin / customer_price) * 100 if customer_price > 0 else 0
     
-    # Display
+    # Calculate bottle count
+    bottle_count = count_bottles(selected_modules, sharing_a_c)
+    
+    # Display metrics
     st.metric("Modules Selected", len(selected_modules))
+    st.metric("Bottles Required", bottle_count)
     st.metric("Customer Price", f"${customer_price:.2f}")
     
     if show_costs:
@@ -778,11 +911,15 @@ with col2:
         st.caption(f"**Total Cost:** ${total_cost:.2f}")
         st.caption(f"**Profit:** ${margin:.2f} ({margin_pct:.1f}%)")
     
+    # Show smart sharing indicator
     if sharing_a_c:
-        st.success("✅ Smart Sharing Active - Save $1.50")
+        st.success("✅ Smart Sharing: Module C FREE!")
+        st.caption("Anions use same bottle as Gen Chem")
 
-# Generate Shipping Label
-st.divider()
+# ============================================================================
+# GENERATE SHIPPING LABEL
+# ============================================================================
+
 st.header("4️⃣ Generate Shipping Label")
 
 if st.session_state.shipping_address and selected_modules and st.session_state.shipping_rate:
@@ -811,9 +948,11 @@ if st.session_state.shipping_address and selected_modules and st.session_state.s
     if st.session_state.shipping_label:
         label = st.session_state.shipping_label
         
+        demo_text = " (DEMO MODE - Not a real shipment)" if label.get('demo_mode', False) else ""
+        
         st.markdown(f"""
         <div class="success-box">
-            <h3>✅ Shipping Label Ready</h3>
+            <h3>✅ Shipping Label Ready{demo_text}</h3>
             <p><strong>Tracking Number:</strong> {label['tracking_number']}</p>
             <p><strong>Service:</strong> {label['service_type']}</p>
             <p><strong>Ship Date:</strong> {label.get('shipment_date', 'N/A')}</p>
@@ -850,15 +989,89 @@ if st.session_state.shipping_address and selected_modules and st.session_state.s
         **Total:** ${customer_price:.2f}
         """)
         
-        if st.button("🎉 Complete Order & Start New", type="primary"):
+        # Save to order history
+        order_record = {
+            'order_number': order_number,
+            'customer': customer_name,
+            'project': project_name,
+            'modules': selected_modules,
+            'tracking': label['tracking_number'],
+            'price': customer_price,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        if st.button("💾 Save Order & Start New", type="primary"):
+            st.session_state.order_history.append(order_record)
+            
             # Reset session state
             st.session_state.modules_selected = {'base': True}
             st.session_state.shipping_rate = None
             st.session_state.shipping_label = None
+            
+            # Generate new order number
+            st.session_state.order_number = f"KELP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            
             st.rerun()
 
 else:
     st.info("ℹ️ Complete steps 1-3 above before generating shipping label")
+
+# ============================================================================
+# PICK LIST SECTION
+# ============================================================================
+
+if show_pick_list and selected_modules:
+    st.divider()
+    st.header("📋 Assembly Pick List")
+    
+    pick_list_df = generate_pick_list(
+        order_id=order_number,
+        customer_name=customer_name,
+        project_name=project_name,
+        selected_modules=selected_modules,
+        sharing_active=sharing_a_c,
+        is_compliance=st.session_state.modules_selected.get('compliance_shipping', False)
+    )
+    
+    st.dataframe(pick_list_df, use_container_width=True, hide_index=True)
+    
+    # Download button for pick list
+    csv = pick_list_df.to_csv(index=False)
+    st.download_button(
+        label="📥 Download Pick List (CSV)",
+        data=csv,
+        file_name=f"pick_list_{order_number}.csv",
+        mime="text/csv"
+    )
+    
+    # Show special warnings
+    if 'module_p' in selected_modules:
+        st.markdown("""
+        <div class="warning-box">
+            <h4>⚠️ PFAS KIT WARNING</h4>
+            <p>Use ONLY PFAS-free materials! No fluorinated plastics, tapes, or gloves.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ============================================================================
+# ORDER HISTORY
+# ============================================================================
+
+if st.session_state.order_history:
+    st.divider()
+    st.header("📊 Order History")
+    
+    history_df = pd.DataFrame(st.session_state.order_history)
+    st.dataframe(history_df, use_container_width=True, hide_index=True)
+    
+    # Download order history
+    history_csv = history_df.to_csv(index=False)
+    st.download_button(
+        label="📥 Download Order History (CSV)",
+        data=history_csv,
+        file_name=f"order_history_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv"
+    )
 
 # ============================================================================
 # FOOTER
@@ -866,3 +1079,4 @@ else:
 
 st.divider()
 st.caption("KELP Smart Kit Builder Pro v2.0 | FedEx API Integration | Real-Time Rates & Labels")
+st.caption("💡 Tip: Configure FedEx credentials in .streamlit/secrets.toml for live rates and labels")

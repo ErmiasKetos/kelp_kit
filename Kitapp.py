@@ -565,7 +565,7 @@ st.markdown("""
 # HEADER
 # ============================================================================
 
-st.markdown('<div class="main-header">🧪 KELP Kit Builder</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🧪 KELP Smart Kit Builder Pro</div>', unsafe_allow_html=True)
 st.markdown('<div style="font-size: 1.2rem; color: #4472C4; margin-bottom: 2rem;">With Real-Time FedEx Shipping & Label Generation</div>', unsafe_allow_html=True)
 
 # ============================================================================

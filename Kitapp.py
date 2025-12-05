@@ -20,7 +20,7 @@ import base64
 
 # Page configuration
 st.set_page_config(
-    page_title="KELP Kit Builder",
+    page_title="KELP Kit ",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"

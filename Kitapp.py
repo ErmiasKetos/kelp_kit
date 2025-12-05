@@ -449,12 +449,11 @@ COMPONENT_LIBRARY = {
         'cost': 5.00,
         'weight_lbs': 0.4,
         'items': [
-            {'item': '250mL HDPE bottle (trace-metal)', 'qty': 1, 'cost': 3.50, 'pn': 'Bottle_02', 'location': 'Shelf B2'},
-            {'item': 'HNO₃ preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_HNO3', 'location': 'Shelf D1'},
+            {'item': '250mL HDPE bottle (trace-metal, pre-preserved with HNO₃)', 'qty': 1, 'cost': 5.00, 'pn': 'Bottle_02', 'location': 'Shelf B2'},
         ],
         'color': '#70AD47',
         'tests': ['Lead (Pb)', 'Copper (Cu)', 'Arsenic (As)', 'Chromium (Cr)', 'Zinc (Zn)', 'Iron (Fe)', 'Manganese (Mn)'],
-        'preservation': 'HNO₃ to pH <2',
+        'preservation': 'Pre-preserved with HNO₃ to pH <2',
         'can_share': False
     },
     'module_c': {
@@ -477,12 +476,11 @@ COMPONENT_LIBRARY = {
         'cost': 4.00,
         'weight_lbs': 0.5,
         'items': [
-            {'item': '500mL PP bottle (nutrients)', 'qty': 1, 'cost': 2.50, 'pn': 'Bottle_04', 'location': 'Shelf B4'},
-            {'item': 'H₂SO₄ preservative vial (2mL)', 'qty': 1, 'cost': 1.50, 'pn': 'Pres_H2SO4', 'location': 'Shelf D2'},
+            {'item': '500mL PP bottle (nutrients, pre-preserved with H₂SO₄)', 'qty': 1, 'cost': 4.00, 'pn': 'Bottle_04', 'location': 'Shelf B4'},
         ],
         'color': '#5B9BD5',
         'tests': ['Ammonia (NH₃)', 'Total Kjeldahl Nitrogen (TKN)', 'Nitrite (NO₂⁻)', 'Phosphate (PO₄³⁻)'],
-        'preservation': 'H₂SO₄ to pH <2',
+        'preservation': 'Pre-preserved with H₂SO₄ to pH <2',
         'can_share': False
     },
     'module_p': {
@@ -733,6 +731,18 @@ with st.sidebar:
     st.header("⚙️ Settings")
     show_costs = st.checkbox("Show Internal Costs", value=True)
     show_pick_list = st.checkbox("Show Pick List", value=False)
+    
+    st.divider()
+    
+    # Reset button in sidebar
+    if st.button("🔄 Reset All", type="secondary", use_container_width=True):
+        st.session_state.modules_selected = {'base': True}
+        st.session_state.shipping_rate = None
+        st.session_state.shipping_label = None
+        st.session_state.shipping_address = {}
+        st.session_state.order_number = f"KELP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        st.success("✅ All fields reset!")
+        st.rerun()
 
 # ============================================================================
 # MAIN CONTENT - MODULE SELECTION
@@ -909,7 +919,7 @@ with col_summary:
         st.caption(f"Labor: ${LABOR_COST:.2f}")
         st.caption(f"Shipping ({shipping_label}): ${shipping_cost:.2f}")
         st.caption(f"**Total Cost:** ${total_cost:.2f}")
-        st.caption(f"**Profit:** ${margin:.2f} ({margin_pct:.1f}%)")
+        st.caption(f"**Markup:** {MARKUP_FACTOR}× ({(MARKUP_FACTOR - 1) * 100:.0f}%)")
     
     # Show smart sharing indicator
     if sharing_a_c:
@@ -1000,18 +1010,35 @@ if st.session_state.shipping_address and selected_modules and st.session_state.s
             'timestamp': datetime.now().isoformat()
         }
         
-        if st.button("💾 Save Order & Start New", type="primary"):
-            st.session_state.order_history.append(order_record)
-            
-            # Reset session state
-            st.session_state.modules_selected = {'base': True}
-            st.session_state.shipping_rate = None
-            st.session_state.shipping_label = None
-            
-            # Generate new order number
-            st.session_state.order_number = f"KELP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            
-            st.rerun()
+        col_save, col_reset = st.columns(2)
+        
+        with col_save:
+            if st.button("💾 Save Order & New", type="primary", use_container_width=True):
+                st.session_state.order_history.append(order_record)
+                
+                # Reset session state
+                st.session_state.modules_selected = {'base': True}
+                st.session_state.shipping_rate = None
+                st.session_state.shipping_label = None
+                
+                # Generate new order number
+                st.session_state.order_number = f"KELP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                
+                st.success("✅ Order saved!")
+                st.rerun()
+        
+        with col_reset:
+            if st.button("🔄 Reset (Don't Save)", type="secondary", use_container_width=True):
+                # Reset without saving
+                st.session_state.modules_selected = {'base': True}
+                st.session_state.shipping_rate = None
+                st.session_state.shipping_label = None
+                
+                # Generate new order number
+                st.session_state.order_number = f"KELP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                
+                st.info("🔄 Order reset - starting fresh")
+                st.rerun()
 
 else:
     st.info("ℹ️ Complete steps 1-3 above before generating shipping label")

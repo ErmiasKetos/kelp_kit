@@ -467,11 +467,11 @@ COMPONENT_LIBRARY = {
         'cost': 2.50,
         'weight_lbs': 0.3,
         'items': [
-            {'item': '250mL HDPE bottle (general chemistry)', 'qty': 1, 'cost': 2.50, 'pn': 'Bottle_01', 'location': 'Shelf B1'},
+            {'item': '250mL HDPE unacidified (for Gen Chem + Anions)', 'qty': 1, 'cost': 2.50, 'pn': 'Bottle_HDPE_Unacid', 'location': 'Shelf B1'},
         ],
         'color': '#4472C4',
         'tests': ['Alkalinity', 'Total Hardness', 'Calcium Hardness', 'Turbidity', 'TDS'],
-        'preservation': 'None (no acid)',
+        'preservation': 'Unacidified',
         'can_share': True,
         'shares_with': 'Module C (Anions)'
     },
@@ -481,11 +481,11 @@ COMPONENT_LIBRARY = {
         'cost': 5.00,
         'weight_lbs': 0.4,
         'items': [
-            {'item': '250mL HDPE bottle (trace-metal, pre-preserved with HNO₃)', 'qty': 1, 'cost': 5.00, 'pn': 'Bottle_02', 'location': 'Shelf B2'},
+            {'item': '250mL HDPE acidified (HNO₃) - For Metals only', 'qty': 1, 'cost': 5.00, 'pn': 'Bottle_HDPE_HNO3', 'location': 'Shelf B2'},
         ],
         'color': '#70AD47',
         'tests': ['Lead (Pb)', 'Copper (Cu)', 'Arsenic (As)', 'Chromium (Cr)', 'Zinc (Zn)', 'Iron (Fe)', 'Manganese (Mn)'],
-        'preservation': 'Pre-preserved with HNO₃ to pH <2',
+        'preservation': 'Acidified with HNO₃',
         'can_share': False
     },
     'module_c': {
@@ -494,11 +494,11 @@ COMPONENT_LIBRARY = {
         'cost': 1.50,
         'weight_lbs': 0.3,
         'items': [
-            {'item': '250mL PP bottle (anions)', 'qty': 1, 'cost': 1.50, 'pn': 'Bottle_03', 'location': 'Shelf B3'},
+            {'item': '250mL HDPE unacidified (for Anions + Gen Chem)', 'qty': 1, 'cost': 1.50, 'pn': 'Bottle_HDPE_Unacid', 'location': 'Shelf B1'},
         ],
         'color': '#FFC000',
         'tests': ['Chloride (Cl⁻)', 'Sulfate (SO₄²⁻)', 'Nitrate (NO₃⁻)', 'Fluoride (F⁻)'],
-        'preservation': 'None (no acid)',
+        'preservation': 'Unacidified',
         'can_share': True,
         'shares_with': 'Module A (Gen Chem)'
     },
@@ -508,11 +508,11 @@ COMPONENT_LIBRARY = {
         'cost': 4.00,
         'weight_lbs': 0.5,
         'items': [
-            {'item': '500mL PP bottle (nutrients, pre-preserved with H₂SO₄)', 'qty': 1, 'cost': 4.00, 'pn': 'Bottle_04', 'location': 'Shelf B4'},
+            {'item': '250mL PP acidified (H₂SO₄) - For Nutrients', 'qty': 1, 'cost': 4.00, 'pn': 'Bottle_PP_H2SO4', 'location': 'Shelf B4'},
         ],
         'color': '#5B9BD5',
         'tests': ['Ammonia (NH₃)', 'Total Kjeldahl Nitrogen (TKN)', 'Nitrite (NO₂⁻)', 'Phosphate (PO₄³⁻)'],
-        'preservation': 'Pre-preserved with H₂SO₄ to pH <2',
+        'preservation': 'Acidified with H₂SO₄',
         'can_share': False
     },
     'module_p': {
@@ -521,7 +521,7 @@ COMPONENT_LIBRARY = {
         'cost': 15.50,
         'weight_lbs': 0.8,
         'items': [
-            {'item': '250mL PP bottle (PFAS-free cert)', 'qty': 2, 'cost': 10.00, 'pn': 'Bottle_05', 'location': 'Shelf C1'},
+            {'item': '250mL PP PFAS-certified bottle', 'qty': 2, 'cost': 10.00, 'pn': 'Bottle_PP_PFAS', 'location': 'Shelf C1'},
             {'item': 'PP caps w/ PE liners', 'qty': 2, 'cost': 3.00, 'pn': 'Cap_PFAS', 'location': 'Shelf C2'},
             {'item': 'PFAS-free labels', 'qty': 2, 'cost': 1.00, 'pn': 'Label_PFAS', 'location': 'Shelf C3'},
             {'item': 'PFAS-free gloves (UPGRADE)', 'qty': 1, 'cost': 1.50, 'pn': 'PPE_PFAS', 'location': 'Shelf E1'},
@@ -529,7 +529,7 @@ COMPONENT_LIBRARY = {
         'color': '#E7E6E6',
         'tests': ['PFAS-3', 'PFAS-14', 'PFAS-18', 'PFAS-25', 'PFAS-40'],
         'special_warning': '⚠️ PFAS KIT - Use ONLY PFAS-free materials!',
-        'preservation': 'None (PFAS-free containers)',
+        'preservation': 'PFAS-certified (unacidified)',
         'can_share': False
     },
     'module_m': {
@@ -850,7 +850,7 @@ st.header("3️⃣ Calculate Shipping Cost")
 # Get selected modules
 selected_modules = [k for k in modules_to_show if st.session_state.modules_selected.get(k, False)]
 
-if st.session_state.shipping_address and selected_modules:
+if selected_modules:
     
     # Calculate package weight
     package_weight = calculate_package_weight(selected_modules)
@@ -860,41 +860,43 @@ if st.session_state.shipping_address and selected_modules:
     st.info(f"📦 Estimated package weight: **{display_weight} lbs**" + 
             (" (includes cooler & ice)" if is_compliance else ""))
     
-    if st.button("🔄 Get Real-Time Shipping Rate from FedEx", type="primary"):
-        with st.spinner("Contacting FedEx API..."):
-            service_type = get_fedex_service_type(is_compliance)
-            
-            rate = st.session_state.fedex_api.calculate_shipping_rate(
-                destination=st.session_state.shipping_address,
-                weight_lbs=package_weight,
-                service_type=service_type,
-                is_compliance=is_compliance
-            )
-            
-            if rate:
-                st.session_state.shipping_rate = rate
-                st.success("✅ Rate calculated successfully!")
-    
-    # Display rate if available
-    if st.session_state.shipping_rate:
-        rate = st.session_state.shipping_rate
+    # Check if address is provided for FedEx rate calculation
+    if st.session_state.shipping_address:
+        if st.button("🔄 Get Real-Time Shipping Rate from FedEx", type="primary"):
+            with st.spinner("Contacting FedEx API..."):
+                service_type = get_fedex_service_type(is_compliance)
+                
+                rate = st.session_state.fedex_api.calculate_shipping_rate(
+                    destination=st.session_state.shipping_address,
+                    weight_lbs=package_weight,
+                    service_type=service_type,
+                    is_compliance=is_compliance
+                )
+                
+                if rate:
+                    st.session_state.shipping_rate = rate
+                    st.success("✅ Rate calculated successfully!")
         
-        st.markdown(f"""
-        <div class="shipping-card">
-            <h3>📍 Shipping Details</h3>
-            <p><strong>Service:</strong> {rate['service_name']}</p>
-            <p><strong>Destination:</strong> {st.session_state.shipping_address['city']}, {st.session_state.shipping_address['stateOrProvinceCode']} {st.session_state.shipping_address['postalCode']}</p>
-            <p><strong>Transit Time:</strong> {rate.get('transit_time', 'N/A')}</p>
-            <div class="rate-display">
-                Shipping Cost: ${rate['total_charge']:.2f}
+        # Display rate if available
+        if st.session_state.shipping_rate:
+            rate = st.session_state.shipping_rate
+            
+            st.markdown(f"""
+            <div class="shipping-card">
+                <h3>📍 Shipping Details</h3>
+                <p><strong>Service:</strong> {rate['service_name']}</p>
+                <p><strong>Destination:</strong> {st.session_state.shipping_address['city']}, {st.session_state.shipping_address['stateOrProvinceCode']} {st.session_state.shipping_address['postalCode']}</p>
+                <p><strong>Transit Time:</strong> {rate.get('transit_time', 'N/A')}</p>
+                <div class="rate-display">
+                    Shipping Cost: ${rate['total_charge']:.2f}
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+    else:
+        st.info("💡 Enter shipping address in the sidebar to get real-time FedEx rates")
 
-elif not selected_modules:
-    st.warning("⚠️ Please select at least one test module")
 else:
-    st.warning("⚠️ Please enter shipping address in the sidebar")
+    st.warning("⚠️ Please select at least one test module")
 
 st.divider()
 
@@ -951,7 +953,6 @@ with col_summary:
         st.caption(f"Labor: ${LABOR_COST:.2f}")
         st.caption(f"Shipping ({shipping_label}): ${shipping_cost:.2f}")
         st.caption(f"**Total Cost:** ${total_cost:.2f}")
-        st.caption(f"**Markup:** {MARKUP_FACTOR}× ({(MARKUP_FACTOR - 1) * 100:.0f}%)")
     
     # Show smart sharing indicator
     if sharing_a_c:

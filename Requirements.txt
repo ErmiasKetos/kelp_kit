@@ -3,3 +3,4 @@ pandas
 openpyxl
 reportlab
 fpdf2 
+reportlab

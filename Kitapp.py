@@ -862,7 +862,8 @@ else:
             st.success("✅ **Smart Sharing!** Uses same bottle as Module A - FREE!")
         st.markdown(f"**Part:** 1300-00007 (shared with A) | **Bottle:** 250mL HDPE")
         st.markdown(f"**Tests:** {', '.join(COMPONENT_LIBRARY['module_c']['tests'])}")
-        st.markdown(f"**Cost:** {'$0.00 (FREE!)' if sharing_active else f'${COMPONENT_LIBRARY[\"module_c\"][\"cost\"]:.2f}'}")
+        cost_display = "$0.00 (FREE!)" if sharing_active else f"${COMPONENT_LIBRARY['module_c']['cost']:.2f}"
+        st.markdown(f"**Cost:** {cost_display}")
     
     # Module D
     with st.expander("✅ Module D: Nutrients" if st.session_state.modules_selected.get('module_d') else "Module D: Nutrients (IC)"):

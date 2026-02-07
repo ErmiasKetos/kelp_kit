@@ -427,217 +427,218 @@ def format_professional_picklist(pl: Dict) -> str:
 
 def generate_pdf(pl: Dict) -> Optional[bytes]:
     """Generate professional PDF pick list using fpdf2"""
-try:
-    from fpdf import FPDF
-    from fpdf.enums import XPos, YPos
-except ImportError:
-    return None
-
-pdf = FPDF()
-pdf.set_auto_page_break(auto=True, margin=15)
-pdf.add_page()
-
-# Header
-pdf.set_font('Helvetica', 'B', 22)
-pdf.set_text_color(0, 51, 102)
-pdf.cell(0, 12, 'KELP LABORATORY SERVICES', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-pdf.set_font('Helvetica', '', 14)
-pdf.set_text_color(100, 100, 100)
-pdf.cell(0, 8, 'Kit Assembly Pick List', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-pdf.ln(5)
-
-# Header line
-pdf.set_draw_color(0, 51, 102)
-pdf.set_line_width(0.8)
-pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-pdf.ln(10)
-
-# Order Info Box
-pdf.set_fill_color(245, 248, 250)
-pdf.set_draw_color(0, 51, 102)
-box_height = 48 if pl['type'] == 'BUNDLE' else 55
-pdf.rect(10, pdf.get_y(), 190, box_height, style='DF')
-
-y_start = pdf.get_y() + 6
-pdf.set_xy(15, y_start)
-
-# Row 1
-pdf.set_font('Helvetica', 'B', 10)
-pdf.set_text_color(0, 0, 0)
-pdf.cell(35, 7, 'Order Number:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.set_font('Helvetica', '', 10)
-pdf.cell(55, 7, pl['order_number'], new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.set_font('Helvetica', 'B', 10)
-pdf.cell(25, 7, 'Generated:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.set_font('Helvetica', '', 10)
-pdf.cell(0, 7, pl['timestamp'], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-# Row 2
-pdf.set_x(15)
-pdf.set_font('Helvetica', 'B', 10)
-pdf.cell(35, 7, 'Order Type:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.set_font('Helvetica', '', 10)
-pdf.cell(55, 7, pl['type'], new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.set_font('Helvetica', 'B', 10)
-pdf.cell(25, 7, 'PFAS:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.set_font('Helvetica', '', 10)
-pfas_text = 'YES - Special Handling' if pl['has_pfas'] else 'No'
-pdf.cell(0, 7, pfas_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-if pl['type'] == 'BUNDLE':
-    # Row 3 - Bundle info
-    pdf.set_x(15)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(35, 7, 'Bundle:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', '', 10)
-    bundle_text = f"{pl['bundle_sku']} - {pl['bundle_name']}"
-    if len(bundle_text) > 70:
-        bundle_text = bundle_text[:67] + '...'
-    pdf.cell(0, 7, bundle_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    try:
+        from fpdf import FPDF
+        from fpdf.enums import XPos, YPos
+    except ImportError as e:
+        return None
+    except Exception as e:
+        return None
     
-    # Row 4
-    pdf.set_x(15)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(35, 7, 'Category:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(55, 7, pl['bundle_type'], new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(25, 7, 'Total Kits:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 7, str(pl['total_kits']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-else:
-    # Row 3 - Tests
-    pdf.set_x(15)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(35, 7, 'Tests:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', '', 10)
-    tests_str = ', '.join(pl['tests'])
-    if len(tests_str) > 75:
-        tests_str = tests_str[:72] + '...'
-    pdf.cell(0, 7, tests_str, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    
-    # Row 4
-    pdf.set_x(15)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(35, 7, 'Bottles:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(55, 7, str(pl['bottles']), new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(25, 7, 'Packages:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 7, str(pl['packages']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    
-    # Row 5
-    pdf.set_x(15)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(35, 7, 'Assembly:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 7, f"{pl['assembly_time']} minutes", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-pdf.ln(box_height - (pdf.get_y() - y_start) + 8)
-
-# Pick List Section
-pdf.set_font('Helvetica', 'B', 13)
-pdf.set_text_color(0, 51, 102)
-pdf.cell(0, 10, 'PICK LIST ITEMS', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-pdf.ln(2)
-
-# Table Header
-pdf.set_fill_color(0, 51, 102)
-pdf.set_text_color(255, 255, 255)
-pdf.set_font('Helvetica', 'B', 10)
-pdf.cell(12, 10, '', fill=True, border=1)
-pdf.cell(48, 10, 'Part Number', fill=True, border=1)
-pdf.cell(112, 10, 'Description', fill=True, border=1)
-pdf.cell(18, 10, 'Qty', fill=True, border=1, align='C')
-pdf.ln()
-
-# Table Rows
-pdf.set_text_color(0, 0, 0)
-pdf.set_font('Helvetica', '', 10)
-
-row_fill = False
-for item in pl['items']:
-    if row_fill:
-        pdf.set_fill_color(248, 248, 248)
-    else:
-        pdf.set_fill_color(255, 255, 255)
-    
-    desc = item['desc']
-    if len(desc) > 55:
-        desc = desc[:52] + '...'
-    
-    pdf.cell(12, 10, '[ ]', fill=True, border=1, align='C')
-    pdf.cell(48, 10, item['part'], fill=True, border=1)
-    pdf.cell(112, 10, desc, fill=True, border=1)
-    pdf.cell(18, 10, str(item['qty']), fill=True, border=1, align='C')
-    pdf.ln()
-    row_fill = not row_fill
-
-pdf.ln(8)
-
-# Instructions
-pdf.set_font('Helvetica', 'B', 13)
-pdf.set_text_color(0, 51, 102)
-pdf.cell(0, 10, 'SPECIAL INSTRUCTIONS', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-pdf.ln(2)
-
-pdf.set_font('Helvetica', '', 10)
-pdf.set_text_color(0, 0, 0)
-
-if pl['type'] == 'BUNDLE':
-    pdf.cell(0, 6, '  * Pre-packed bundle - no individual component picking required', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    if pl['has_pfas']:
+    try:
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        
+        # Header
+        pdf.set_font('Helvetica', 'B', 22)
+        pdf.set_text_color(0, 51, 102)
+        pdf.cell(0, 12, 'KELP LABORATORY SERVICES', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        pdf.set_font('Helvetica', '', 14)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 8, 'Kit Assembly Pick List', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        pdf.ln(5)
+        
+        # Header line
+        pdf.set_draw_color(0, 51, 102)
+        pdf.set_line_width(0.8)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(10)
+        
+        # Order Info Box
+        pdf.set_fill_color(245, 248, 250)
+        pdf.set_draw_color(0, 51, 102)
+        box_height = 48 if pl['type'] == 'BUNDLE' else 55
+        pdf.rect(10, pdf.get_y(), 190, box_height, style='DF')
+        
+        y_start = pdf.get_y() + 6
+        pdf.set_xy(15, y_start)
+        
+        # Row 1
         pdf.set_font('Helvetica', 'B', 10)
-        pdf.set_text_color(180, 0, 0)
-        pdf.cell(0, 6, '  * WARNING: PFAS kit included - Handle with PFAS-free gloves', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-else:
-    pdf.cell(0, 6, '  * Assemble all components as listed above', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    if pl['packages'] > 1:
-        pdf.cell(0, 6, f"  * Split into {pl['packages']} packages (max 2 bottles per box)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    if pl['has_pfas']:
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(35, 7, 'Order Number:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(55, 7, pl['order_number'], new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_font('Helvetica', 'B', 10)
-        pdf.set_text_color(180, 0, 0)
-        pdf.cell(0, 6, '  * WARNING: PFAS order - Use PFAS-free gloves and packaging ONLY', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    if pl.get('sharing'):
+        pdf.cell(25, 7, 'Generated:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 7, pl['timestamp'], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        # Row 2
+        pdf.set_x(15)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(35, 7, 'Order Type:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(55, 7, pl['type'], new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(25, 7, 'PFAS:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pfas_text = 'YES - Special Handling' if pl['has_pfas'] else 'No'
+        pdf.cell(0, 7, pfas_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        if pl['type'] == 'BUNDLE':
+            pdf.set_x(15)
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(35, 7, 'Bundle:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', '', 10)
+            bundle_text = f"{pl['bundle_sku']} - {pl['bundle_name']}"
+            if len(bundle_text) > 70:
+                bundle_text = bundle_text[:67] + '...'
+            pdf.cell(0, 7, bundle_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            pdf.set_x(15)
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(35, 7, 'Category:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(55, 7, pl['bundle_type'], new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(25, 7, 'Total Kits:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(0, 7, str(pl['total_kits']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        else:
+            pdf.set_x(15)
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(35, 7, 'Tests:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', '', 10)
+            tests_str = ', '.join(pl['tests'])
+            if len(tests_str) > 75:
+                tests_str = tests_str[:72] + '...'
+            pdf.cell(0, 7, tests_str, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            pdf.set_x(15)
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(35, 7, 'Bottles:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(55, 7, str(pl['bottles']), new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(25, 7, 'Packages:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(0, 7, str(pl['packages']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            pdf.set_x(15)
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(35, 7, 'Assembly:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(0, 7, f"{pl['assembly_time']} minutes", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        pdf.ln(box_height - (pdf.get_y() - y_start) + 8)
+        
+        # Pick List Section
+        pdf.set_font('Helvetica', 'B', 13)
+        pdf.set_text_color(0, 51, 102)
+        pdf.cell(0, 10, 'PICK LIST ITEMS', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(2)
+        
+        # Table Header
+        pdf.set_fill_color(0, 51, 102)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(12, 10, '', fill=True, border=1)
+        pdf.cell(48, 10, 'Part Number', fill=True, border=1)
+        pdf.cell(112, 10, 'Description', fill=True, border=1)
+        pdf.cell(18, 10, 'Qty', fill=True, border=1, align='C')
+        pdf.ln()
+        
+        # Table Rows
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font('Helvetica', '', 10)
+        
+        row_fill = False
+        for item in pl['items']:
+            if row_fill:
+                pdf.set_fill_color(248, 248, 248)
+            else:
+                pdf.set_fill_color(255, 255, 255)
+            
+            desc = item['desc']
+            if len(desc) > 55:
+                desc = desc[:52] + '...'
+            
+            pdf.cell(12, 10, '[ ]', fill=True, border=1, align='C')
+            pdf.cell(48, 10, item['part'], fill=True, border=1)
+            pdf.cell(112, 10, desc, fill=True, border=1)
+            pdf.cell(18, 10, str(item['qty']), fill=True, border=1, align='C')
+            pdf.ln()
+            row_fill = not row_fill
+        
+        pdf.ln(8)
+        
+        # Instructions
+        pdf.set_font('Helvetica', 'B', 13)
+        pdf.set_text_color(0, 51, 102)
+        pdf.cell(0, 10, 'SPECIAL INSTRUCTIONS', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(2)
+        
         pdf.set_font('Helvetica', '', 10)
         pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 6, '  * Bottle sharing: Gen Chem & Anions share bottle 1300-00007', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-pdf.ln(12)
-
-# Verification Section
-pdf.set_draw_color(180, 180, 180)
-pdf.set_line_width(0.3)
-pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-pdf.ln(8)
-
-pdf.set_font('Helvetica', 'B', 13)
-pdf.set_text_color(0, 51, 102)
-pdf.cell(0, 10, 'VERIFICATION', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-pdf.ln(5)
-
-pdf.set_font('Helvetica', '', 10)
-pdf.set_text_color(0, 0, 0)
-
-pdf.cell(28, 8, 'Assembled By:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.cell(75, 8, '_' * 45, new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.cell(12, 8, 'Date:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.cell(0, 8, '_' * 28, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-pdf.ln(6)
-
-pdf.cell(28, 8, 'Verified By:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.cell(75, 8, '_' * 45, new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.cell(12, 8, 'Date:', new_x=XPos.RIGHT, new_y=YPos.TOP)
-pdf.cell(0, 8, '_' * 28, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-# Footer
-pdf.ln(15)
-pdf.set_font('Helvetica', 'I', 8)
-pdf.set_text_color(150, 150, 150)
-pdf.cell(0, 5, 'KELP Laboratory Services | Sunnyvale, CA | Generated by Kit Builder Pro v8.0', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-
-return bytes(pdf.output())
+        
+        if pl['type'] == 'BUNDLE':
+            pdf.cell(0, 6, '  * Pre-packed bundle - no individual component picking required', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            if pl['has_pfas']:
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.set_text_color(180, 0, 0)
+                pdf.cell(0, 6, '  * WARNING: PFAS kit included - Handle with PFAS-free gloves', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        else:
+            pdf.cell(0, 6, '  * Assemble all components as listed above', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            if pl['packages'] > 1:
+                pdf.cell(0, 6, f"  * Split into {pl['packages']} packages (max 2 bottles per box)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            if pl['has_pfas']:
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.set_text_color(180, 0, 0)
+                pdf.cell(0, 6, '  * WARNING: PFAS order - Use PFAS-free gloves and packaging ONLY', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            if pl.get('sharing'):
+                pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(0, 0, 0)
+                pdf.cell(0, 6, '  * Bottle sharing: Gen Chem & Anions share bottle 1300-00007', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        pdf.ln(12)
+        
+        # Verification Section
+        pdf.set_draw_color(180, 180, 180)
+        pdf.set_line_width(0.3)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(8)
+        
+        pdf.set_font('Helvetica', 'B', 13)
+        pdf.set_text_color(0, 51, 102)
+        pdf.cell(0, 10, 'VERIFICATION', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(5)
+        
+        pdf.set_font('Helvetica', '', 10)
+        pdf.set_text_color(0, 0, 0)
+        
+        pdf.cell(28, 8, 'Assembled By:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(75, 8, '_' * 45, new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(12, 8, 'Date:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(0, 8, '_' * 28, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(6)
+        
+        pdf.cell(28, 8, 'Verified By:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(75, 8, '_' * 45, new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(12, 8, 'Date:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(0, 8, '_' * 28, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        # Footer
+        pdf.ln(15)
+        pdf.set_font('Helvetica', 'I', 8)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 5, 'KELP Laboratory Services | Sunnyvale, CA | Generated by Kit Builder Pro v8.0', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        
+        return bytes(pdf.output())
+    
+    except Exception as e:
+        return None
 
 
 # =============================================================================
@@ -1272,7 +1273,17 @@ elif st.session_state.current_step == 4:
                 use_container_width=True
             )
         else:
-            st.error("PDF generation failed. Check requirements.txt includes 'fpdf2'")
+            # Show debug info
+            st.error("PDF generation failed")
+            try:
+                from fpdf import FPDF
+                st.info("✅ fpdf2 is installed")
+                from fpdf.enums import XPos, YPos
+                st.info("✅ fpdf2 enums available")
+            except ImportError as e:
+                st.error(f"❌ fpdf2 import error: {e}")
+            except Exception as e:
+                st.error(f"❌ Unexpected error: {e}")
     
     st.markdown('</div>', unsafe_allow_html=True)
     

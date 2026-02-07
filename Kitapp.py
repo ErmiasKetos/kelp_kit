@@ -1,25 +1,28 @@
 """
-KELP Smart Kit Builder Pro v7.0
+KELP Smart Kit Builder Pro v8.0
 ===============================
-Intelligent Water Testing Kit Configuration System
+Enterprise-Grade Water Testing Kit Configuration System
 
 Features:
-- 10 Pre-configured Bundles with Pre-Packed Kit SKUs
-- Custom Order Selection with Component-Level Pick Lists
-- Professional PDF Pick List Generation
-- FedEx Shipping Integration
+- Multi-step wizard navigation
+- Professional pick list formatting
+- Auto-generated order numbers
+- Pre-packed bundle support
+- Custom order support
+- PDF generation
 
 Author: KELP Laboratory Services
-Version: 7.0
+Version: 8.0
 Date: February 2026
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, Optional, List
 import math
 from io import BytesIO
+import random
 
 # =============================================================================
 # PAGE CONFIGURATION
@@ -29,235 +32,98 @@ st.set_page_config(
     page_title="KELP Kit Builder Pro",
     page_icon="🧪",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 
 # =============================================================================
-# FEDEX API CLASS
-# =============================================================================
-
-class FedExAPI:
-    """FedEx API Integration with Demo Mode Support"""
-    
-    def __init__(self):
-        try:
-            self.api_key = st.secrets.get("FEDEX_API_KEY", "")
-            self.secret_key = st.secrets.get("FEDEX_SECRET_KEY", "")
-            self.account_number = st.secrets.get("FEDEX_ACCOUNT_NUMBER", "")
-        except Exception:
-            self.api_key = ""
-            self.secret_key = ""
-            self.account_number = ""
-        
-        self.demo_mode = not all([self.api_key, self.secret_key, self.account_number])
-        
-        try:
-            self.origin = {
-                "streetLines": [st.secrets.get("LAB_STREET", "123 Innovation Way")],
-                "city": st.secrets.get("LAB_CITY", "Sunnyvale"),
-                "stateOrProvinceCode": st.secrets.get("LAB_STATE", "CA"),
-                "postalCode": st.secrets.get("LAB_ZIP", "94085"),
-                "countryCode": "US"
-            }
-        except Exception:
-            self.origin = {
-                "streetLines": ["123 Innovation Way"],
-                "city": "Sunnyvale",
-                "stateOrProvinceCode": "CA",
-                "postalCode": "94085",
-                "countryCode": "US"
-            }
-        
-        if self.demo_mode:
-            st.sidebar.info("ℹ️ **FedEx Demo Mode** - Using estimated rates")
-    
-    def calculate_shipping_rate(
-        self, 
-        destination: Dict, 
-        weight_lbs: float, 
-        service_type: str = "FEDEX_GROUND",
-        is_compliance: bool = False
-    ) -> Optional[Dict]:
-        if self.demo_mode:
-            base_rate = 50.0 if service_type == "FEDEX_2_DAY" else 12.0
-            if weight_lbs > 5:
-                base_rate += (weight_lbs - 5) * 2
-            return {
-                'total_charge': round(base_rate, 2),
-                'service_name': 'FedEx 2Day' if service_type == "FEDEX_2_DAY" else 'FedEx Ground',
-                'transit_time': '2 business days' if service_type == "FEDEX_2_DAY" else '3-5 business days',
-                'delivery_date': datetime.now().strftime('%Y-%m-%d'),
-                'demo_mode': True
-            }
-        return None
-    
-    def generate_label(
-        self, 
-        destination: Dict, 
-        weight_lbs: float, 
-        service_type: str = "FEDEX_GROUND",
-        package_number: int = 1, 
-        total_packages: int = 1
-    ) -> Optional[Dict]:
-        if self.demo_mode:
-            import random
-            tracking = ''.join([str(random.randint(0, 9)) for _ in range(12)])
-            return {
-                'tracking_number': tracking,
-                'package_number': package_number,
-                'total_packages': total_packages,
-                'demo_mode': True
-            }
-        return None
-
-
-# =============================================================================
-# PRE-PACKED KIT SKUs
+# CONSTANTS & DATA
 # =============================================================================
 
 PREPACKED_KITS = {
     '1300-00001_REV01': {
         'name': 'KIT KELP (Metals + Anion + Gen Chem)',
-        'description': 'Standard water testing kit - pre-packed',
         'weight_lbs': 2.5
     },
     '1300-00003_REV01': {
         'name': 'KIT KELP (PFAS)',
-        'description': 'PFAS testing kit - pre-packed',
         'weight_lbs': 1.5
     }
 }
 
-
-# =============================================================================
-# BUNDLE DEFINITIONS - EXACT MAPPING FROM SPREADSHEET
-# =============================================================================
-
 BUNDLE_CATALOG = {
-    # Commercial Bundles
     'COM-001': {
         'name': 'Food & Beverage Water Quality Package',
         'type': 'Commercial',
         'description': 'Process water quality testing for F&B operations',
         'price': 325.00,
-        'kits': {
-            '1300-00001_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1}
     },
     'COM-002': {
         'name': 'Agricultural Irrigation Package',
         'type': 'Commercial',
         'description': 'Irrigation water quality assessment',
         'price': 295.00,
-        'kits': {
-            '1300-00001_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1}
     },
-    
-    # Real Estate Bundles
     'RE-001': {
         'name': 'Real Estate Well Water Package',
         'type': 'Real Estate',
         'description': 'Well water testing for property transactions',
         'price': 399.00,
-        'kits': {
-            '1300-00001_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1}
     },
     'RE-002': {
         'name': 'Conventional Loan Testing Package',
         'type': 'Real Estate',
         'description': 'Standard loan requirement testing',
         'price': 275.00,
-        'kits': {
-            '1300-00001_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1}
     },
-    
-    # Residential Bundles (Non-PFAS)
     'RES-001': {
         'name': 'Essential Home Water Test Package',
         'type': 'Residential',
         'description': 'Basic water quality for homeowners',
         'price': 249.00,
-        'kits': {
-            '1300-00001_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1}
     },
     'RES-002': {
         'name': 'Complete Homeowner Package',
         'type': 'Residential',
         'description': 'Comprehensive water quality with nutrients',
         'price': 349.00,
-        'kits': {
-            '1300-00001_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1}
     },
-    
-    # Residential Bundles (With PFAS)
     'RES-003': {
         'name': 'PFAS Home Safety Package',
         'type': 'Residential + PFAS',
         'description': 'Standard testing plus PFAS screening',
         'price': 475.00,
-        'kits': {
-            '1300-00001_REV01': 1,
-            '1300-00003_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1, '1300-00003_REV01': 1}
     },
     'RES-004': {
         'name': 'Basic PFAS Screen',
         'type': 'Residential + PFAS',
         'description': 'PFAS testing with essential metals and anions',
         'price': 495.00,
-        'kits': {
-            '1300-00001_REV01': 1,
-            '1300-00003_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1, '1300-00003_REV01': 1}
     },
     'RES-005': {
         'name': 'Comprehensive Home Safety Screen',
         'type': 'Residential + PFAS',
         'description': 'Full panel including PFAS',
         'price': 595.00,
-        'kits': {
-            '1300-00001_REV01': 1,
-            '1300-00003_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1, '1300-00003_REV01': 1}
     },
     'RES-006': {
         'name': 'Ultimate Water Safety Suite',
         'type': 'Residential + PFAS',
         'description': 'Complete testing - all parameters including PFAS',
         'price': 795.00,
-        'kits': {
-            '1300-00001_REV01': 1,
-            '1300-00003_REV01': 1
-        }
+        'kits': {'1300-00001_REV01': 1, '1300-00003_REV01': 1}
     }
 }
 
-
-# =============================================================================
-# COMPONENT LIBRARY (For Custom Orders Only)
-# =============================================================================
-
-COMPONENTS = {
-    "1300-00007": {"type": "Bottle", "desc": "Bottle: Anions + Gen Chem (unpreserved)"},
-    "1300-00008": {"type": "Bottle", "desc": "Bottle: Metals (HNO₃ preserved)"},
-    "1300-00009": {"type": "Bottle", "desc": "Bottle: Nutrients (H₂SO₄ preserved)"},
-    "1300-00010": {"type": "Bottle", "desc": "Bottle: PFAS (PFAS-certified)"},
-    "1300-00058": {"type": "Box", "desc": "Shipping Box"},
-    "1300-00018": {"type": "Gloves", "desc": "Gloves - Nitrile"},
-    "1300-00019": {"type": "Gloves", "desc": "Gloves - PFAS-free"},
-    "1300-00027": {"type": "Packaging", "desc": "Bottle Protection - Generic"},
-    "1300-00028": {"type": "Packaging", "desc": "Bottle Protection - PFAS"},
-    "1300-00029": {"type": "Document", "desc": "Collection Instructions"},
-    "1300-00030": {"type": "Document", "desc": "Chain of Custody Form"},
-}
-
-# Test Parameters for Custom Orders
 TEST_PARAMETERS = {
     'general_chemistry': {
         'name': 'General Chemistry',
@@ -275,7 +141,7 @@ TEST_PARAMETERS = {
     },
     'anions': {
         'name': 'Anions',
-        'bottle': '1300-00007',  # Shares with General Chemistry
+        'bottle': '1300-00007',
         'cost': 1.50,
         'cost_when_shared': 0.00,
         'weight': 0.3,
@@ -286,7 +152,7 @@ TEST_PARAMETERS = {
         'bottle': '1300-00009',
         'cost': 4.00,
         'weight': 0.5,
-        'tests': ['Nitrate/Nitrite (EPA 353.2)', 'Phosphate']
+        'tests': ['Nitrate/Nitrite', 'Phosphate']
     },
     'pfas': {
         'name': 'PFAS Testing',
@@ -300,404 +166,418 @@ TEST_PARAMETERS = {
 
 BASE_KIT_COST = 9.50
 BASE_KIT_WEIGHT = 1.5
-ASSEMBLY_TIME_PER_PKG = 7
+ASSEMBLY_TIME = 7
+
+STEP_NAMES = [
+    "Order Type",
+    "Selection", 
+    "Shipping",
+    "Review",
+    "Pick List"
+]
 
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
-def get_fedex_service(is_compliance: bool) -> str:
-    return "FEDEX_2_DAY" if is_compliance else "FEDEX_GROUND"
+def generate_order_number() -> str:
+    """Generate order number: ORDER-MM-DD-YYYY-XXX"""
+    now = datetime.now()
+    seq = random.randint(100, 999)
+    return f"ORDER-{now.strftime('%m-%d-%Y')}-{seq}"
 
 
-def bundle_has_pfas(bundle_sku: str) -> bool:
-    """Check if bundle includes PFAS kit"""
-    if bundle_sku not in BUNDLE_CATALOG:
-        return False
-    return '1300-00003_REV01' in BUNDLE_CATALOG[bundle_sku]['kits']
+def bundle_has_pfas(sku: str) -> bool:
+    return '1300-00003_REV01' in BUNDLE_CATALOG.get(sku, {}).get('kits', {})
 
 
-def get_bundle_total_kits(bundle_sku: str) -> int:
-    """Get total number of kits in a bundle"""
-    if bundle_sku not in BUNDLE_CATALOG:
-        return 0
-    return sum(BUNDLE_CATALOG[bundle_sku]['kits'].values())
+def get_bundle_kits(sku: str) -> int:
+    return sum(BUNDLE_CATALOG.get(sku, {}).get('kits', {}).values())
 
 
-def get_bundle_weight(bundle_sku: str) -> float:
-    """Calculate total weight for a bundle"""
-    if bundle_sku not in BUNDLE_CATALOG:
-        return 0.0
+def get_bundle_weight(sku: str) -> float:
     total = 0.0
-    for kit_sku, qty in BUNDLE_CATALOG[bundle_sku]['kits'].items():
-        if kit_sku in PREPACKED_KITS:
-            total += PREPACKED_KITS[kit_sku]['weight_lbs'] * qty
+    for kit, qty in BUNDLE_CATALOG.get(sku, {}).get('kits', {}).items():
+        total += PREPACKED_KITS.get(kit, {}).get('weight_lbs', 0) * qty
     return total
 
 
-def calculate_custom_order(selected_tests: List[str]) -> Dict:
-    """Calculate details for a custom order"""
-    sharing_active = 'general_chemistry' in selected_tests and 'anions' in selected_tests
-    has_pfas = 'pfas' in selected_tests
+def calc_custom_order(tests: List[str]) -> Dict:
+    sharing = 'general_chemistry' in tests and 'anions' in tests
+    has_pfas = 'pfas' in tests
     
-    # Count bottles
     bottles = 0
-    for test in selected_tests:
-        if test == 'general_chemistry':
+    for t in tests:
+        if t == 'general_chemistry':
             bottles += 1
-        elif test == 'metals':
+        elif t == 'metals':
             bottles += 1
-        elif test == 'anions' and not sharing_active:
+        elif t == 'anions' and not sharing:
             bottles += 1
-        elif test == 'nutrients':
+        elif t == 'nutrients':
             bottles += 1
-        elif test == 'pfas':
+        elif t == 'pfas':
             bottles += 2
     
-    # Calculate packages (max 2 bottles per package)
     packages = max(1, math.ceil(bottles / 2))
     
-    # Calculate weight
     weight = BASE_KIT_WEIGHT * packages
-    for test in selected_tests:
-        if test in TEST_PARAMETERS:
-            weight += TEST_PARAMETERS[test]['weight']
-    
-    # Calculate cost
     cost = BASE_KIT_COST * packages
-    for test in selected_tests:
-        if test in TEST_PARAMETERS:
-            if test == 'anions' and sharing_active:
-                cost += TEST_PARAMETERS[test].get('cost_when_shared', 0)
+    
+    for t in tests:
+        if t in TEST_PARAMETERS:
+            weight += TEST_PARAMETERS[t]['weight']
+            if t == 'anions' and sharing:
+                cost += TEST_PARAMETERS[t].get('cost_when_shared', 0)
             else:
-                cost += TEST_PARAMETERS[test]['cost']
+                cost += TEST_PARAMETERS[t]['cost']
     
     return {
         'bottles': bottles,
         'packages': packages,
         'weight': round(weight, 2),
         'cost': round(cost, 2),
-        'sharing_active': sharing_active,
+        'sharing': sharing,
         'has_pfas': has_pfas
     }
 
 
-def estimate_shipping(is_compliance: bool, packages: int) -> float:
-    per_pkg = 50.0 if is_compliance else 12.0
-    return per_pkg * packages
-
-
-def calc_total_shipping(
-    api: FedExAPI, 
-    dest: Dict, 
-    weight_per_pkg: float, 
-    packages: int,
-    service: str, 
-    compliance: bool
-) -> Optional[Dict]:
-    total = 0
-    last = None
-    for _ in range(packages):
-        rate = api.calculate_shipping_rate(dest, weight_per_pkg, service, compliance)
-        if rate:
-            total += rate['total_charge']
-            last = rate
-        else:
-            return None
-    if last:
-        return {
-            'total_charge': round(total, 2),
-            'service_name': last['service_name'],
-            'transit_time': last.get('transit_time', 'N/A'),
-            'packages': packages,
-            'per_package': round(total / packages, 2),
-            'demo_mode': last.get('demo_mode', False)
-        }
-    return None
+def estimate_shipping(compliance: bool, packages: int) -> float:
+    return (50.0 if compliance else 12.0) * packages
 
 
 # =============================================================================
 # PICK LIST GENERATION
 # =============================================================================
 
-def create_bundle_pick_list(bundle_sku: str) -> Dict:
-    """Create pick list for a pre-packed bundle order"""
-    bundle = BUNDLE_CATALOG[bundle_sku]
-    
+def create_bundle_picklist(sku: str, order_num: str) -> Dict:
+    bundle = BUNDLE_CATALOG[sku]
     items = []
+    
     for kit_sku, qty in bundle['kits'].items():
-        kit_info = PREPACKED_KITS[kit_sku]
         items.append({
-            'part_number': kit_sku,
-            'description': kit_info['name'],
-            'quantity': qty
+            'part': kit_sku,
+            'desc': PREPACKED_KITS[kit_sku]['name'],
+            'qty': qty
         })
     
-    total_kits = sum(bundle['kits'].values())
-    has_pfas = '1300-00003_REV01' in bundle['kits']
-    
-    notes = [
-        f"📦 PRE-PACKED BUNDLE ORDER: {bundle_sku}",
-        "All components are pre-assembled - no individual picking required"
-    ]
-    if has_pfas:
-        notes.append("⚠️ PFAS KIT INCLUDED - Handle with PFAS-free gloves")
-    
     return {
+        'order_number': order_num,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'order_type': 'BUNDLE',
-        'bundle_sku': bundle_sku,
+        'type': 'BUNDLE',
+        'bundle_sku': sku,
         'bundle_name': bundle['name'],
         'bundle_type': bundle['type'],
-        'total_kits': total_kits,
-        'has_pfas': has_pfas,
-        'items': items,
-        'notes': notes
+        'total_kits': sum(bundle['kits'].values()),
+        'has_pfas': '1300-00003_REV01' in bundle['kits'],
+        'items': items
     }
 
 
-def create_custom_pick_list(selected_tests: List[str], order_info: Dict) -> Dict:
-    """Create pick list for a custom order with individual components"""
-    bottles = order_info['bottles']
-    packages = order_info['packages']
-    sharing = order_info['sharing_active']
-    has_pfas = order_info['has_pfas']
-    
+def create_custom_picklist(tests: List[str], info: Dict, order_num: str) -> Dict:
     items = []
     
-    # Shipping boxes
-    items.append({'part_number': '1300-00058', 'description': 'Shipping Box', 'quantity': packages})
+    # Boxes
+    items.append({'part': '1300-00058', 'desc': 'Shipping Box', 'qty': info['packages']})
     
     # Bottles
-    if 'general_chemistry' in selected_tests or 'anions' in selected_tests:
-        note = " (shared Gen Chem + Anions)" if sharing else ""
-        items.append({
-            'part_number': '1300-00007', 
-            'description': f'Bottle: Anions + Gen Chem{note}', 
-            'quantity': 1
-        })
-    
-    if 'metals' in selected_tests:
-        items.append({'part_number': '1300-00008', 'description': 'Bottle: Metals (HNO₃)', 'quantity': 1})
-    
-    if 'nutrients' in selected_tests:
-        items.append({'part_number': '1300-00009', 'description': 'Bottle: Nutrients (H₂SO₄)', 'quantity': 1})
-    
-    if 'pfas' in selected_tests:
-        items.append({'part_number': '1300-00010', 'description': 'Bottle: PFAS', 'quantity': 2})
+    if 'general_chemistry' in tests or 'anions' in tests:
+        items.append({'part': '1300-00007', 'desc': 'Bottle: Anions + Gen Chem', 'qty': 1})
+    if 'metals' in tests:
+        items.append({'part': '1300-00008', 'desc': 'Bottle: Metals (HNO₃ preserved)', 'qty': 1})
+    if 'nutrients' in tests:
+        items.append({'part': '1300-00009', 'desc': 'Bottle: Nutrients (H₂SO₄ preserved)', 'qty': 1})
+    if 'pfas' in tests:
+        items.append({'part': '1300-00010', 'desc': 'Bottle: PFAS', 'qty': 2})
     
     # Gloves
-    if has_pfas:
-        items.append({'part_number': '1300-00019', 'description': 'Gloves - PFAS-free', 'quantity': packages * 2})
+    if info['has_pfas']:
+        items.append({'part': '1300-00019', 'desc': 'Gloves - PFAS-free', 'qty': info['packages'] * 2})
     else:
-        items.append({'part_number': '1300-00018', 'description': 'Gloves - Nitrile', 'quantity': packages * 2})
+        items.append({'part': '1300-00018', 'desc': 'Gloves - Nitrile', 'qty': info['packages'] * 2})
     
     # Packaging
-    non_pfas_bottles = bottles - (2 if has_pfas else 0)
-    if non_pfas_bottles > 0:
-        items.append({'part_number': '1300-00027', 'description': 'Bottle Protection - Generic', 'quantity': non_pfas_bottles})
-    if has_pfas:
-        items.append({'part_number': '1300-00028', 'description': 'Bottle Protection - PFAS', 'quantity': 2})
+    non_pfas = info['bottles'] - (2 if info['has_pfas'] else 0)
+    if non_pfas > 0:
+        items.append({'part': '1300-00027', 'desc': 'Bottle Protection - Standard', 'qty': non_pfas})
+    if info['has_pfas']:
+        items.append({'part': '1300-00028', 'desc': 'Bottle Protection - PFAS', 'qty': 2})
     
-    # Documents
-    items.append({'part_number': '1300-00029', 'description': 'Collection Instructions', 'quantity': packages})
-    items.append({'part_number': '1300-00030', 'description': 'Chain of Custody Form', 'quantity': 1})
+    # Instructions only (no COC)
+    items.append({'part': '1300-00029', 'desc': 'Collection Instructions', 'qty': info['packages']})
     
-    # Notes
-    notes = ["🔧 CUSTOM ORDER - Individual component picking required"]
-    if packages > 1:
-        notes.append(f"⚠️ MULTIPLE PACKAGES: {packages} boxes required (max 2 bottles per box)")
-    if has_pfas:
-        notes.append("⚠️ PFAS ORDER: Use PFAS-free gloves and PFAS packaging only")
-    if sharing:
-        notes.append("✅ BOTTLE SHARING: General Chemistry & Anions share bottle 1300-00007")
-    
-    test_names = [TEST_PARAMETERS[t]['name'] for t in selected_tests]
+    test_names = [TEST_PARAMETERS[t]['name'] for t in tests]
     
     return {
+        'order_number': order_num,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'order_type': 'CUSTOM',
-        'tests_selected': test_names,
-        'total_bottles': bottles,
-        'total_packages': packages,
-        'sharing_active': sharing,
-        'has_pfas': has_pfas,
-        'assembly_time': ASSEMBLY_TIME_PER_PKG * packages,
-        'items': items,
-        'notes': notes
+        'type': 'CUSTOM',
+        'tests': test_names,
+        'bottles': info['bottles'],
+        'packages': info['packages'],
+        'sharing': info['sharing'],
+        'has_pfas': info['has_pfas'],
+        'assembly_time': ASSEMBLY_TIME * info['packages'],
+        'items': items
     }
 
 
-def format_pick_list_text(pick_list: Dict) -> str:
-    """Format pick list as printable text"""
+def format_professional_picklist(pl: Dict) -> str:
+    """Generate professional formatted pick list"""
     lines = []
-    lines.append("=" * 65)
-    lines.append("              KELP LABORATORY SERVICES")
-    lines.append("              KIT ASSEMBLY PICK LIST")
-    lines.append("=" * 65)
-    lines.append(f"Generated: {pick_list['timestamp']}")
-    lines.append(f"Order Type: {pick_list['order_type']}")
-    lines.append("")
     
-    if pick_list['order_type'] == 'BUNDLE':
-        lines.append(f"Bundle SKU: {pick_list['bundle_sku']}")
-        lines.append(f"Bundle Name: {pick_list['bundle_name']}")
-        lines.append(f"Bundle Type: {pick_list['bundle_type']}")
-        lines.append(f"Total Kits: {pick_list['total_kits']}")
+    # Header
+    lines.append("┌" + "─" * 68 + "┐")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("│" + "KELP LABORATORY SERVICES".center(68) + "│")
+    lines.append("│" + "Kit Assembly Pick List".center(68) + "│")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("├" + "─" * 68 + "┤")
+    
+    # Order Info
+    lines.append("│" + " " * 68 + "│")
+    lines.append("│  " + f"Order Number: {pl['order_number']}".ljust(66) + "│")
+    lines.append("│  " + f"Generated: {pl['timestamp']}".ljust(66) + "│")
+    lines.append("│  " + f"Order Type: {pl['type']}".ljust(66) + "│")
+    
+    if pl['type'] == 'BUNDLE':
+        lines.append("│" + " " * 68 + "│")
+        lines.append("│  " + f"Bundle: {pl['bundle_sku']} - {pl['bundle_name']}".ljust(66) + "│")
+        lines.append("│  " + f"Category: {pl['bundle_type']}".ljust(66) + "│")
+        lines.append("│  " + f"Total Kits: {pl['total_kits']}".ljust(66) + "│")
     else:
-        lines.append(f"Tests: {', '.join(pick_list['tests_selected'])}")
-        lines.append(f"Total Bottles: {pick_list['total_bottles']}")
-        lines.append(f"Total Packages: {pick_list['total_packages']}")
-        lines.append(f"Est. Assembly Time: {pick_list['assembly_time']} minutes")
+        lines.append("│" + " " * 68 + "│")
+        lines.append("│  " + f"Tests: {', '.join(pl['tests'])}".ljust(66) + "│")
+        lines.append("│  " + f"Bottles: {pl['bottles']} | Packages: {pl['packages']}".ljust(66) + "│")
+        if pl['sharing']:
+            lines.append("│  " + "Bottle Sharing: Yes (Gen Chem + Anions)".ljust(66) + "│")
+        lines.append("│  " + f"Est. Assembly: {pl['assembly_time']} minutes".ljust(66) + "│")
     
-    lines.append(f"PFAS Included: {'YES ⚠️' if pick_list['has_pfas'] else 'No'}")
-    lines.append("")
+    pfas_status = "YES ⚠" if pl['has_pfas'] else "No"
+    lines.append("│  " + f"PFAS Included: {pfas_status}".ljust(66) + "│")
+    lines.append("│" + " " * 68 + "│")
     
-    lines.append("-" * 65)
-    lines.append("NOTES:")
-    for note in pick_list['notes']:
-        lines.append(f"  {note}")
-    lines.append("")
+    # Pick List Header
+    lines.append("├" + "─" * 68 + "┤")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("│  " + "PICK LIST ITEMS".ljust(66) + "│")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("│  " + "─" * 64 + "  │")
+    lines.append("│  " + f"{'☐':<3}{'Part Number':<22}{'Description':<32}{'Qty':>7}" + "  │")
+    lines.append("│  " + "─" * 64 + "  │")
     
-    lines.append("-" * 65)
-    lines.append("PICK LIST ITEMS:")
-    lines.append(f"{'Part Number':<22} {'Description':<32} {'Qty':>6}")
-    lines.append("-" * 65)
+    # Items
+    for item in pl['items']:
+        line = f"{'☐':<3}{item['part']:<22}{item['desc']:<32}{item['qty']:>7}"
+        lines.append("│  " + line + "  │")
     
-    for item in pick_list['items']:
-        lines.append(f"☐ {item['part_number']:<20} {item['description']:<32} {item['quantity']:>6}")
+    lines.append("│  " + "─" * 64 + "  │")
+    lines.append("│" + " " * 68 + "│")
     
-    lines.append("")
-    lines.append("=" * 65)
-    lines.append("")
-    lines.append("Assembled By: ___________________________ Date: ______________")
-    lines.append("")
-    lines.append("Verified By:  ___________________________ Date: ______________")
-    lines.append("")
-    lines.append("=" * 65)
+    # Special Instructions
+    if pl['type'] == 'BUNDLE':
+        lines.append("│  " + "INSTRUCTIONS:".ljust(66) + "│")
+        lines.append("│  " + "• Pre-packed bundle - no individual component picking required".ljust(66) + "│")
+        if pl['has_pfas']:
+            lines.append("│  " + "• ⚠ PFAS kit included - use PFAS-free gloves when handling".ljust(66) + "│")
+    else:
+        lines.append("│  " + "INSTRUCTIONS:".ljust(66) + "│")
+        lines.append("│  " + "• Assemble components as listed above".ljust(66) + "│")
+        if pl['packages'] > 1:
+            lines.append("│  " + f"• Split into {pl['packages']} packages (max 2 bottles per box)".ljust(66) + "│")
+        if pl['has_pfas']:
+            lines.append("│  " + "• ⚠ PFAS order - use PFAS-free gloves and PFAS packaging ONLY".ljust(66) + "│")
+        if pl['sharing']:
+            lines.append("│  " + "• Gen Chem & Anions share bottle 1300-00007".ljust(66) + "│")
+    
+    lines.append("│" + " " * 68 + "│")
+    
+    # Signatures
+    lines.append("├" + "─" * 68 + "┤")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("│  " + "VERIFICATION".ljust(66) + "│")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("│  " + "Assembled By: ________________________  Date: ______________".ljust(66) + "│")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("│  " + "Verified By:  ________________________  Date: ______________".ljust(66) + "│")
+    lines.append("│" + " " * 68 + "│")
+    lines.append("└" + "─" * 68 + "┘")
     
     return "\n".join(lines)
 
 
-def generate_pdf(pick_list: Dict, order_id: str = None, customer: str = None) -> Optional[bytes]:
-    """Generate PDF pick list"""
+def generate_pdf(pl: Dict) -> Optional[bytes]:
+    """Generate professional PDF pick list"""
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.enums import TA_CENTER
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
     except ImportError:
         return None
     
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.75*inch, bottomMargin=0.75*inch,
+                           leftMargin=0.75*inch, rightMargin=0.75*inch)
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, 
-                                  spaceAfter=6, alignment=TA_CENTER, textColor=colors.HexColor('#0066B2'))
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=11, 
-                                     spaceAfter=6, alignment=TA_CENTER)
+    
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=24, 
+                                  spaceAfter=4, alignment=TA_CENTER, 
+                                  textColor=colors.HexColor('#003366'))
+    
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=14, 
+                                     spaceAfter=20, alignment=TA_CENTER,
+                                     textColor=colors.HexColor('#666666'))
+    
     section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=12,
-                                    spaceBefore=12, spaceAfter=6, textColor=colors.HexColor('#0066B2'))
+                                    spaceBefore=16, spaceAfter=8, 
+                                    textColor=colors.HexColor('#003366'),
+                                    borderPadding=4)
+    
+    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10,
+                                   spaceAfter=4)
     
     elements = []
     
     # Header
     elements.append(Paragraph("KELP LABORATORY SERVICES", title_style))
     elements.append(Paragraph("Kit Assembly Pick List", subtitle_style))
-    elements.append(Spacer(1, 0.1*inch))
     
-    # Order info
-    info = [f"Generated: {pick_list['timestamp']}"]
-    if order_id:
-        info.append(f"Order: {order_id}")
-    if customer:
-        info.append(f"Customer: {customer}")
-    elements.append(Paragraph(" | ".join(info), subtitle_style))
-    
-    order_label = f"<b>{pick_list['order_type']}</b>"
-    if pick_list['order_type'] == 'BUNDLE':
-        order_label += f" - {pick_list['bundle_sku']} - {pick_list['bundle_name']}"
-    elements.append(Paragraph(order_label, subtitle_style))
+    # Divider
+    elements.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#003366')))
     elements.append(Spacer(1, 0.2*inch))
     
-    # Summary
-    elements.append(Paragraph("Order Summary", section_style))
+    # Order Info Box
+    order_info = [
+        [Paragraph(f"<b>Order Number:</b> {pl['order_number']}", normal_style),
+         Paragraph(f"<b>Generated:</b> {pl['timestamp']}", normal_style)],
+        [Paragraph(f"<b>Order Type:</b> {pl['type']}", normal_style),
+         Paragraph(f"<b>PFAS Included:</b> {'YES ⚠️' if pl['has_pfas'] else 'No'}", normal_style)]
+    ]
     
-    if pick_list['order_type'] == 'BUNDLE':
-        summary = [
-            ['Bundle SKU:', pick_list['bundle_sku']],
-            ['Bundle Name:', pick_list['bundle_name']],
-            ['Bundle Type:', pick_list['bundle_type']],
-            ['Total Kits:', str(pick_list['total_kits'])],
-            ['PFAS Included:', 'YES ⚠️' if pick_list['has_pfas'] else 'No'],
-        ]
+    if pl['type'] == 'BUNDLE':
+        order_info.append([
+            Paragraph(f"<b>Bundle:</b> {pl['bundle_sku']}", normal_style),
+            Paragraph(f"<b>Name:</b> {pl['bundle_name']}", normal_style)
+        ])
+        order_info.append([
+            Paragraph(f"<b>Category:</b> {pl['bundle_type']}", normal_style),
+            Paragraph(f"<b>Total Kits:</b> {pl['total_kits']}", normal_style)
+        ])
     else:
-        summary = [
-            ['Tests:', ', '.join(pick_list['tests_selected'])],
-            ['Total Bottles:', str(pick_list['total_bottles'])],
-            ['Total Packages:', str(pick_list['total_packages'])],
-            ['Bottle Sharing:', 'Yes' if pick_list['sharing_active'] else 'No'],
-            ['PFAS Included:', 'YES ⚠️' if pick_list['has_pfas'] else 'No'],
-            ['Est. Assembly:', f"{pick_list['assembly_time']} minutes"],
-        ]
+        order_info.append([
+            Paragraph(f"<b>Tests:</b> {', '.join(pl['tests'])}", normal_style),
+            Paragraph(f"<b>Assembly Time:</b> {pl['assembly_time']} min", normal_style)
+        ])
+        order_info.append([
+            Paragraph(f"<b>Bottles:</b> {pl['bottles']}", normal_style),
+            Paragraph(f"<b>Packages:</b> {pl['packages']}", normal_style)
+        ])
     
-    summary_tbl = Table(summary, colWidths=[1.5*inch, 4*inch])
-    summary_tbl.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    info_table = Table(order_info, colWidths=[3.5*inch, 3.5*inch])
+    info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F5F8FA')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#003366')),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
     ]))
-    elements.append(summary_tbl)
-    elements.append(Spacer(1, 0.2*inch))
+    elements.append(info_table)
+    elements.append(Spacer(1, 0.3*inch))
     
-    # Pick list
+    # Pick List Section
     elements.append(Paragraph("Pick List Items", section_style))
     
-    tbl_data = [['☐', 'Part Number', 'Description', 'Qty']]
-    for item in pick_list['items']:
-        tbl_data.append(['☐', item['part_number'], item['description'], str(item['quantity'])])
+    # Table Header
+    tbl_data = [[
+        Paragraph("<b>✓</b>", normal_style),
+        Paragraph("<b>Part Number</b>", normal_style),
+        Paragraph("<b>Description</b>", normal_style),
+        Paragraph("<b>Qty</b>", normal_style)
+    ]]
     
-    pick_tbl = Table(tbl_data, colWidths=[0.4*inch, 1.6*inch, 3.0*inch, 0.5*inch])
-    pick_tbl.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066B2')),
+    # Table Rows
+    for item in pl['items']:
+        tbl_data.append([
+            "☐",
+            item['part'],
+            item['desc'],
+            str(item['qty'])
+        ])
+    
+    pick_table = Table(tbl_data, colWidths=[0.4*inch, 1.8*inch, 4.0*inch, 0.6*inch])
+    pick_table.setStyle(TableStyle([
+        # Header
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#003366')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        
+        # Body
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
         ('ALIGN', (3, 0), (3, -1), 'CENTER'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
-    ]))
-    elements.append(pick_tbl)
-    elements.append(Spacer(1, 0.2*inch))
-    
-    # Notes
-    if pick_list['notes']:
-        elements.append(Paragraph("Special Instructions", section_style))
-        for note in pick_list['notes']:
-            elements.append(Paragraph(f"• {note}", styles['Normal']))
-        elements.append(Spacer(1, 0.1*inch))
-    
-    # Signatures
-    elements.append(Spacer(1, 0.3*inch))
-    elements.append(Paragraph("─" * 70, styles['Normal']))
-    sig_data = [
-        ['Assembled By:', '________________________', 'Date:', '____________'],
-        ['Verified By:', '________________________', 'Date:', '____________'],
-    ]
-    sig_tbl = Table(sig_data, colWidths=[1*inch, 2.2*inch, 0.5*inch, 1.5*inch])
-    sig_tbl.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        
+        # Grid
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+        ('BOX', (0, 0), (-1, -1), 1.5, colors.HexColor('#003366')),
+        
+        # Padding
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        
+        # Alternating rows
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9F9F9')]),
     ]))
-    elements.append(sig_tbl)
+    elements.append(pick_table)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Instructions
+    elements.append(Paragraph("Special Instructions", section_style))
+    
+    if pl['type'] == 'BUNDLE':
+        elements.append(Paragraph("• Pre-packed bundle order - no individual component picking required", normal_style))
+        if pl['has_pfas']:
+            elements.append(Paragraph("• <b>⚠️ PFAS kit included</b> - Handle with PFAS-free gloves", normal_style))
+    else:
+        elements.append(Paragraph("• Assemble all components as listed in the pick list above", normal_style))
+        if pl['packages'] > 1:
+            elements.append(Paragraph(f"• <b>Multiple packages:</b> Split into {pl['packages']} boxes (max 2 bottles per box)", normal_style))
+        if pl['has_pfas']:
+            elements.append(Paragraph("• <b>⚠️ PFAS order:</b> Use PFAS-free gloves and PFAS packaging ONLY", normal_style))
+        if pl.get('sharing'):
+            elements.append(Paragraph("• <b>Bottle sharing:</b> General Chemistry & Anions share bottle 1300-00007", normal_style))
+    
+    elements.append(Spacer(1, 0.4*inch))
+    
+    # Signature Section
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#CCCCCC')))
+    elements.append(Spacer(1, 0.2*inch))
+    elements.append(Paragraph("Verification", section_style))
+    
+    sig_data = [
+        ["Assembled By:", "_" * 35, "Date:", "_" * 15],
+        ["", "", "", ""],
+        ["Verified By:", "_" * 35, "Date:", "_" * 15],
+    ]
+    
+    sig_table = Table(sig_data, colWidths=[1*inch, 2.5*inch, 0.6*inch, 1.5*inch])
+    sig_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+    ]))
+    elements.append(sig_table)
     
     doc.build(elements)
     buffer.seek(0)
@@ -705,63 +585,191 @@ def generate_pdf(pick_list: Dict, order_id: str = None, customer: str = None) ->
 
 
 # =============================================================================
-# CSS STYLES
+# CUSTOM CSS
 # =============================================================================
 
 st.markdown("""
 <style>
-    .main { background-color: #f8f9fa; }
+    /* Hide default streamlit elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
     
-    .pick-list-box {
-        background: #f8f9fa;
+    /* Main container */
+    .main { background-color: #f5f7fa; }
+    
+    /* Step indicator */
+    .step-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .step-item {
+        display: flex;
+        align-items: center;
+        margin: 0 0.5rem;
+    }
+    
+    .step-circle {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 14px;
+        margin-right: 8px;
+    }
+    
+    .step-active .step-circle {
+        background: #0066B2;
+        color: white;
+    }
+    
+    .step-complete .step-circle {
+        background: #00A86B;
+        color: white;
+    }
+    
+    .step-pending .step-circle {
+        background: #E0E0E0;
+        color: #999;
+    }
+    
+    .step-label {
+        font-size: 13px;
+        color: #666;
+    }
+    
+    .step-active .step-label {
+        color: #0066B2;
+        font-weight: 600;
+    }
+    
+    .step-complete .step-label {
+        color: #00A86B;
+    }
+    
+    .step-connector {
+        width: 40px;
+        height: 2px;
+        background: #E0E0E0;
+        margin: 0 0.5rem;
+    }
+    
+    .step-connector.complete {
+        background: #00A86B;
+    }
+    
+    /* Card styles */
+    .card {
+        background: white;
         padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 1rem;
+    }
+    
+    .card-header {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #003366;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #0066B2;
+    }
+    
+    /* Bundle cards */
+    .bundle-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    
+    .bundle-card {
+        background: white;
+        border: 2px solid #E0E0E0;
+        border-radius: 10px;
+        padding: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .bundle-card:hover {
+        border-color: #0066B2;
+        box-shadow: 0 4px 12px rgba(0,102,178,0.15);
+    }
+    
+    .bundle-card.selected {
+        border-color: #00A86B;
+        background: #F0FFF4;
+    }
+    
+    /* Price display */
+    .price-display {
+        text-align: center;
+        padding: 2rem;
+        background: linear-gradient(135deg, #003366 0%, #0066B2 100%);
+        border-radius: 12px;
+        color: white;
+    }
+    
+    .price-label { font-size: 1rem; opacity: 0.9; }
+    .price-amount { font-size: 3rem; font-weight: 700; }
+    .price-sub { font-size: 0.9rem; opacity: 0.8; }
+    
+    /* Pick list */
+    .picklist-box {
+        background: #FAFAFA;
+        border: 1px solid #E0E0E0;
         border-radius: 8px;
-        border: 1px solid #dee2e6;
-        font-family: 'Courier New', monospace;
-        font-size: 0.85rem;
-        white-space: pre-wrap;
+        padding: 1rem;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre;
+        overflow-x: auto;
         max-height: 500px;
         overflow-y: auto;
     }
     
-    .price-box {
+    /* Navigation buttons */
+    .nav-container {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #E0E0E0;
+    }
+    
+    /* Review section */
+    .review-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #F0F0F0;
+    }
+    
+    .review-label { color: #666; }
+    .review-value { font-weight: 600; color: #333; }
+    
+    /* Success message */
+    .success-box {
+        background: #F0FFF4;
+        border: 2px solid #00A86B;
+        border-radius: 12px;
+        padding: 2rem;
         text-align: center;
-        padding: 1.5rem;
-        background: linear-gradient(135deg, #0066B2 0%, #3399CC 100%);
-        border-radius: 8px;
-        color: white;
-        margin: 1rem 0;
     }
     
-    .price-box .label { font-size: 0.9rem; opacity: 0.9; }
-    .price-box .amount { font-size: 2.5rem; font-weight: bold; }
-    
-    .shipping-box {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        border: 2px solid #0066B2;
-        margin: 1rem 0;
-    }
-    
-    .rate-box {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #00A86B;
-        padding: 1rem;
-        background: #f0f8f5;
-        border-radius: 4px;
-        text-align: center;
-        margin-top: 1rem;
-    }
-    
-    .pfas-alert {
-        background: #FFF3CD;
-        border-left: 4px solid #FFA500;
-        padding: 0.75rem;
-        border-radius: 4px;
-        margin: 0.5rem 0;
-    }
+    .success-icon { font-size: 3rem; margin-bottom: 1rem; }
+    .success-title { font-size: 1.5rem; font-weight: 600; color: #00A86B; }
+    .success-order { font-size: 1.25rem; color: #333; margin-top: 0.5rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -770,428 +778,464 @@ st.markdown("""
 # SESSION STATE
 # =============================================================================
 
-defaults = {
-    'order_mode': 'bundle',
-    'selected_bundle': None,
-    'selected_tests': {},
-    'shipping_address': None,
-    'shipping_rate': None,
-    'pick_list': None,
-    'order_history': [],
-    'fedex': None
-}
+if 'current_step' not in st.session_state:
+    st.session_state.current_step = 0
+if 'order_mode' not in st.session_state:
+    st.session_state.order_mode = None
+if 'selected_bundle' not in st.session_state:
+    st.session_state.selected_bundle = None
+if 'selected_tests' not in st.session_state:
+    st.session_state.selected_tests = {}
+if 'compliance' not in st.session_state:
+    st.session_state.compliance = False
+if 'order_number' not in st.session_state:
+    st.session_state.order_number = None
+if 'pick_list' not in st.session_state:
+    st.session_state.pick_list = None
+if 'order_complete' not in st.session_state:
+    st.session_state.order_complete = False
 
-for key, val in defaults.items():
-    if key not in st.session_state:
-        st.session_state[key] = val
 
-if st.session_state.fedex is None:
-    st.session_state.fedex = FedExAPI()
+def reset_wizard():
+    st.session_state.current_step = 0
+    st.session_state.order_mode = None
+    st.session_state.selected_bundle = None
+    st.session_state.selected_tests = {}
+    st.session_state.compliance = False
+    st.session_state.order_number = None
+    st.session_state.pick_list = None
+    st.session_state.order_complete = False
+
+
+def go_next():
+    st.session_state.current_step += 1
+
+
+def go_back():
+    st.session_state.current_step -= 1
+
+
+# =============================================================================
+# STEP INDICATOR
+# =============================================================================
+
+def render_step_indicator():
+    step = st.session_state.current_step
+    
+    html = '<div class="step-container">'
+    
+    for i, name in enumerate(STEP_NAMES):
+        if i < step:
+            status = "complete"
+            icon = "✓"
+        elif i == step:
+            status = "active"
+            icon = str(i + 1)
+        else:
+            status = "pending"
+            icon = str(i + 1)
+        
+        html += f'''
+        <div class="step-item step-{status}">
+            <div class="step-circle">{icon}</div>
+            <div class="step-label">{name}</div>
+        </div>
+        '''
+        
+        if i < len(STEP_NAMES) - 1:
+            conn_class = "complete" if i < step else ""
+            html += f'<div class="step-connector {conn_class}"></div>'
+    
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
 
 
 # =============================================================================
 # HEADER
 # =============================================================================
 
-st.title("🧪 KELP Smart Kit Builder Pro")
-st.markdown("**Water Testing Kit Configuration System** | *Pre-Packed Bundles & Custom Orders*")
-st.divider()
+col1, col2, col3 = st.columns([1, 3, 1])
+with col2:
+    st.markdown("""
+    <div style="text-align: center; padding: 1rem 0;">
+        <h1 style="color: #003366; margin-bottom: 0;">🧪 KELP Kit Builder Pro</h1>
+        <p style="color: #666; font-size: 1rem;">Enterprise Water Testing Kit Configuration</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-
-# =============================================================================
-# SIDEBAR
-# =============================================================================
-
-with st.sidebar:
-    st.header("📍 Shipping")
-    
-    if st.button("🔄 Reset All", key="reset"):
-        for key in ['selected_bundle', 'selected_tests', 'shipping_address', 'shipping_rate', 'pick_list']:
-            st.session_state[key] = defaults[key] if key in defaults else None
-        st.session_state.order_mode = 'bundle'
+with col3:
+    if st.button("🔄 Start Over", key="reset_top"):
+        reset_wizard()
         st.rerun()
+
+st.divider()
+
+# Render step indicator
+render_step_indicator()
+
+
+# =============================================================================
+# STEP 0: ORDER TYPE
+# =============================================================================
+
+if st.session_state.current_step == 0:
+    st.markdown('<div class="card"><div class="card-header">Select Order Type</div>', unsafe_allow_html=True)
     
-    st.divider()
+    col1, col2 = st.columns(2)
     
-    contact = st.text_input("Contact Name", key="contact")
-    street = st.text_input("Street", key="street")
-    street2 = st.text_input("Street 2", key="street2")
-    
-    c1, c2 = st.columns(2)
-    city = c1.text_input("City", key="city")
-    state = c2.text_input("State", max_chars=2, key="state")
-    
-    c3, c4 = st.columns(2)
-    zipcode = c3.text_input("ZIP", key="zip")
-    phone = c4.text_input("Phone", key="phone")
-    
-    if st.button("💾 Save Address", type="primary", key="save_addr"):
-        if city and state and zipcode:
-            st.session_state.shipping_address = {
-                'contact_name': contact,
-                'streetLines': [s for s in [street, street2] if s],
-                'city': city,
-                'stateOrProvinceCode': state.upper(),
-                'postalCode': zipcode,
-                'countryCode': 'US',
-                'phone': phone
-            }
-            st.success("✅ Saved!")
+    with col1:
+        bundle_selected = st.session_state.order_mode == 'bundle'
+        if st.button(
+            "📦 Pre-Packed Bundle\n\nSelect from 10 pre-configured packages",
+            key="btn_bundle",
+            type="primary" if bundle_selected else "secondary",
+            use_container_width=True
+        ):
+            st.session_state.order_mode = 'bundle'
             st.rerun()
+    
+    with col2:
+        custom_selected = st.session_state.order_mode == 'custom'
+        if st.button(
+            "🔧 Custom Order\n\nBuild your own test combination",
+            key="btn_custom",
+            type="primary" if custom_selected else "secondary",
+            use_container_width=True
+        ):
+            st.session_state.order_mode = 'custom'
+            st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Navigation
+    st.markdown('<div class="nav-container">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col3:
+        if st.session_state.order_mode:
+            if st.button("Next →", key="next_0", type="primary", use_container_width=True):
+                go_next()
+                st.rerun()
         else:
-            st.error("City, State, ZIP required")
+            st.button("Next →", key="next_0_disabled", disabled=True, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =============================================================================
+# STEP 1: SELECTION
+# =============================================================================
+
+elif st.session_state.current_step == 1:
     
-    if st.session_state.shipping_address:
-        addr = st.session_state.shipping_address
-        st.caption(f"📍 {addr['city']}, {addr['stateOrProvinceCode']} {addr['postalCode']}")
-
-
-# =============================================================================
-# STEP 1: ORDER TYPE
-# =============================================================================
-
-st.header("1️⃣ Select Order Type")
-
-order_mode = st.radio(
-    "Order Type:",
-    ['bundle', 'custom'],
-    format_func=lambda x: "📦 Pre-Packed Bundle" if x == 'bundle' else "🔧 Custom Order",
-    horizontal=True,
-    key="order_mode_radio"
-)
-st.session_state.order_mode = order_mode
-
-st.divider()
-
-
-# =============================================================================
-# BUNDLE SELECTION
-# =============================================================================
-
-if st.session_state.order_mode == 'bundle':
-    st.subheader("📦 Select Bundle")
-    st.caption("Pick list will show pre-packed kit SKU(s) only")
-    
-    # Group by type
-    groups = {}
-    for sku, data in BUNDLE_CATALOG.items():
-        t = data['type']
-        if t not in groups:
-            groups[t] = []
-        groups[t].append((sku, data))
-    
-    for group_name, bundles in groups.items():
-        st.markdown(f"**{group_name}**")
-        cols = st.columns(min(len(bundles), 3))
+    if st.session_state.order_mode == 'bundle':
+        st.markdown('<div class="card"><div class="card-header">Select Bundle</div>', unsafe_allow_html=True)
         
-        for i, (sku, data) in enumerate(bundles):
-            with cols[i % 3]:
-                selected = st.session_state.selected_bundle == sku
-                has_pfas = '1300-00003_REV01' in data['kits']
-                total_kits = sum(data['kits'].values())
-                
-                label = f"{'✅ ' if selected else ''}{sku}\n{data['name']}\n{total_kits} kit{'s' if total_kits > 1 else ''} | ${data['price']:.0f}"
-                
-                if st.button(label, key=f"b_{sku}", type="primary" if selected else "secondary"):
-                    st.session_state.selected_bundle = sku
-                    st.session_state.shipping_rate = None
-                    st.session_state.pick_list = None
-                    st.rerun()
-                
-                if has_pfas:
-                    st.caption("⚠️ Includes PFAS")
-        st.markdown("")
-    
-    # Show selection
-    if st.session_state.selected_bundle:
-        b = BUNDLE_CATALOG[st.session_state.selected_bundle]
-        st.success(f"**Selected: {st.session_state.selected_bundle}** - {b['name']}")
+        # Group bundles
+        groups = {}
+        for sku, data in BUNDLE_CATALOG.items():
+            t = data['type']
+            if t not in groups:
+                groups[t] = []
+            groups[t].append((sku, data))
         
-        st.markdown("**Kits to Pick:**")
-        for kit_sku, qty in b['kits'].items():
-            st.markdown(f"- `{kit_sku}` - {PREPACKED_KITS[kit_sku]['name']} × **{qty}**")
-    
-    st.session_state.selected_tests = {}
-
-
-# =============================================================================
-# CUSTOM ORDER
-# =============================================================================
-
-else:
-    st.subheader("🔧 Custom Order")
-    st.caption("Pick list will show individual components")
-    
-    for test_key, test_data in TEST_PARAMETERS.items():
-        checked = st.session_state.selected_tests.get(test_key, False)
-        
-        # Check for sharing
-        sharing = (test_key == 'anions' and 
-                   st.session_state.selected_tests.get('general_chemistry', False))
-        
-        label = test_data['name']
-        if test_key == 'pfas':
-            label += " ⚠️"
-        if sharing:
-            label += " 🎁 FREE (shares bottle)"
-        
-        with st.expander(f"{'✅ ' if checked else ''}{label}", expanded=sharing):
-            new_val = st.checkbox(f"Select {test_data['name']}", value=checked, key=f"t_{test_key}")
-            st.session_state.selected_tests[test_key] = new_val
+        for group_name, bundles in groups.items():
+            st.subheader(group_name)
             
-            if sharing and new_val:
-                st.success("✅ Shares bottle with General Chemistry - FREE!")
-            if test_key == 'pfas' and new_val:
-                st.warning("⚠️ PFAS requires special handling")
+            cols = st.columns(3)
+            for i, (sku, data) in enumerate(bundles):
+                with cols[i % 3]:
+                    selected = st.session_state.selected_bundle == sku
+                    has_pfas = '1300-00003_REV01' in data['kits']
+                    kits = sum(data['kits'].values())
+                    
+                    # Card content
+                    pfas_badge = "⚠️ PFAS" if has_pfas else ""
+                    btn_label = f"{'✅ ' if selected else ''}{sku}\n{data['name']}\n{kits} kit(s) • ${data['price']:.0f} {pfas_badge}"
+                    
+                    if st.button(btn_label, key=f"bundle_{sku}", 
+                                type="primary" if selected else "secondary",
+                                use_container_width=True):
+                        st.session_state.selected_bundle = sku
+                        st.rerun()
             
-            st.markdown(f"**Bottle:** {test_data['bottle']} | **Tests:** {', '.join(test_data['tests'])}")
-            
-            if sharing:
-                st.markdown("**Cost:** $0.00 (FREE)")
-            else:
-                st.markdown(f"**Cost:** ${test_data['cost']:.2f}")
+            st.markdown("")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        can_proceed = st.session_state.selected_bundle is not None
     
-    st.session_state.selected_bundle = None
-
-st.divider()
-
-
-# =============================================================================
-# SHIPPING OPTIONS
-# =============================================================================
-
-st.subheader("📦 Shipping")
-
-compliance = st.checkbox("**Compliance Shipping** (FedEx 2-Day)", key="compliance")
-
-st.divider()
-
-
-# =============================================================================
-# CALCULATE ORDER
-# =============================================================================
-
-has_order = False
-total_kits = 0
-packages = 0
-weight = 0.0
-base_price = 0.0
-has_pfas = False
-
-if st.session_state.order_mode == 'bundle' and st.session_state.selected_bundle:
-    has_order = True
-    b = BUNDLE_CATALOG[st.session_state.selected_bundle]
-    total_kits = sum(b['kits'].values())
-    packages = total_kits
-    weight = get_bundle_weight(st.session_state.selected_bundle)
-    base_price = b['price']
-    has_pfas = bundle_has_pfas(st.session_state.selected_bundle)
-
-elif st.session_state.order_mode == 'custom':
-    selected = [k for k, v in st.session_state.selected_tests.items() if v]
-    if selected:
-        has_order = True
-        info = calculate_custom_order(selected)
-        total_kits = info['bottles']
-        packages = info['packages']
-        weight = info['weight']
-        base_price = info['cost']
-        has_pfas = info['has_pfas']
+    else:  # Custom order
+        st.markdown('<div class="card"><div class="card-header">Select Tests</div>', unsafe_allow_html=True)
+        
+        sharing = (st.session_state.selected_tests.get('general_chemistry', False) and 
+                   st.session_state.selected_tests.get('anions', False))
+        
+        for key, data in TEST_PARAMETERS.items():
+            checked = st.session_state.selected_tests.get(key, False)
+            
+            # Special labels
+            label = data['name']
+            if key == 'pfas':
+                label += " ⚠️"
+            if key == 'anions' and sharing:
+                label += " 🎁 FREE"
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                new_val = st.checkbox(
+                    label,
+                    value=checked,
+                    key=f"test_{key}"
+                )
+                st.session_state.selected_tests[key] = new_val
+                
+                # Show details
+                if new_val:
+                    if key == 'anions' and sharing:
+                        st.success("✅ Shares bottle with General Chemistry - FREE!")
+                    if key == 'pfas':
+                        st.warning("⚠️ Requires PFAS-free handling")
+            
+            with col2:
+                if key == 'anions' and sharing:
+                    st.markdown("**$0.00**")
+                else:
+                    st.markdown(f"**${data['cost']:.2f}**")
+            
+            st.markdown("---")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        can_proceed = any(st.session_state.selected_tests.values())
+    
+    # Navigation
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.button("← Back", key="back_1", use_container_width=True):
+            go_back()
+            st.rerun()
+    with col3:
+        if can_proceed:
+            if st.button("Next →", key="next_1", type="primary", use_container_width=True):
+                go_next()
+                st.rerun()
+        else:
+            st.button("Next →", key="next_1_disabled", disabled=True, use_container_width=True)
 
 
 # =============================================================================
 # STEP 2: SHIPPING
 # =============================================================================
 
-st.header("2️⃣ Calculate Shipping")
-
-if has_order:
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Items" if st.session_state.order_mode == 'bundle' else "Bottles", total_kits)
-    c2.metric("Packages", packages)
-    c3.metric("Weight", f"{weight:.1f} lbs")
+elif st.session_state.current_step == 2:
+    st.markdown('<div class="card"><div class="card-header">Shipping Options</div>', unsafe_allow_html=True)
     
-    ship_weight = weight + (5.0 * packages if compliance else 0)
+    st.session_state.compliance = st.checkbox(
+        "**Compliance Shipping** (FedEx 2-Day Priority)",
+        value=st.session_state.compliance,
+        key="compliance_check"
+    )
     
-    if st.session_state.shipping_address:
-        if st.button(f"🔄 Get FedEx Rate", type="primary", key="get_rate"):
-            with st.spinner("Calculating..."):
-                rate = calc_total_shipping(
-                    st.session_state.fedex,
-                    st.session_state.shipping_address,
-                    ship_weight / packages,
-                    packages,
-                    get_fedex_service(compliance),
-                    compliance
-                )
-                if rate:
-                    st.session_state.shipping_rate = rate
-                    st.success("✅ Done!")
-                    st.rerun()
-        
-        if st.session_state.shipping_rate:
-            r = st.session_state.shipping_rate
-            st.markdown(f"""
-            <div class="shipping-box">
-                <p><strong>Service:</strong> {r['service_name']} | <strong>Packages:</strong> {r['packages']}</p>
-                <div class="rate-box">Shipping: ${r['total_charge']:.2f}</div>
-                {'<p style="text-align:center;color:#999;">Demo Mode</p>' if r.get('demo_mode') else ''}
-            </div>
-            """, unsafe_allow_html=True)
+    if st.session_state.compliance:
+        st.info("📦 FedEx 2-Day shipping for time-sensitive samples")
     else:
-        st.info("💡 Enter address in sidebar")
-        est = estimate_shipping(compliance, packages)
-        st.caption(f"Estimated: ${est:.2f}")
-else:
-    st.warning("⚠️ Select a bundle or tests first")
-
-st.divider()
-
-
-# =============================================================================
-# STEP 3: SUMMARY
-# =============================================================================
-
-st.header("3️⃣ Cost Summary")
-
-if has_order:
-    ship_cost = st.session_state.shipping_rate['total_charge'] if st.session_state.shipping_rate else estimate_shipping(compliance, packages)
-    total = base_price + ship_cost
+        st.info("📦 Standard FedEx Ground shipping (3-5 business days)")
     
-    label = f"Bundle: {st.session_state.selected_bundle}" if st.session_state.order_mode == 'bundle' else "Custom Order"
+    # Calculate and show estimate
+    if st.session_state.order_mode == 'bundle':
+        packages = get_bundle_kits(st.session_state.selected_bundle)
+    else:
+        tests = [k for k, v in st.session_state.selected_tests.items() if v]
+        info = calc_custom_order(tests)
+        packages = info['packages']
+    
+    ship_est = estimate_shipping(st.session_state.compliance, packages)
     
     st.markdown(f"""
-    <div class="price-box">
-        <div class="label">{label}</div>
-        <div class="amount">${total:.2f}</div>
-        <div class="label">includes ${ship_cost:.2f} shipping</div>
+    <div style="background: #F5F8FA; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+        <div style="display: flex; justify-content: space-between;">
+            <span>Estimated Shipping ({packages} package{'s' if packages > 1 else ''}):</span>
+            <span style="font-weight: 600;">${ship_est:.2f}</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Navigation
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.button("← Back", key="back_2", use_container_width=True):
+            go_back()
+            st.rerun()
+    with col3:
+        if st.button("Next →", key="next_2", type="primary", use_container_width=True):
+            go_next()
+            st.rerun()
 
-st.divider()
+
+# =============================================================================
+# STEP 3: REVIEW
+# =============================================================================
+
+elif st.session_state.current_step == 3:
+    st.markdown('<div class="card"><div class="card-header">Review Order</div>', unsafe_allow_html=True)
+    
+    # Calculate totals
+    if st.session_state.order_mode == 'bundle':
+        bundle = BUNDLE_CATALOG[st.session_state.selected_bundle]
+        base_price = bundle['price']
+        packages = get_bundle_kits(st.session_state.selected_bundle)
+        has_pfas = bundle_has_pfas(st.session_state.selected_bundle)
+        
+        st.markdown(f"**Order Type:** Pre-Packed Bundle")
+        st.markdown(f"**Bundle:** {st.session_state.selected_bundle} - {bundle['name']}")
+        st.markdown(f"**Category:** {bundle['type']}")
+        st.markdown(f"**Total Kits:** {packages}")
+        
+    else:
+        tests = [k for k, v in st.session_state.selected_tests.items() if v]
+        info = calc_custom_order(tests)
+        base_price = info['cost']
+        packages = info['packages']
+        has_pfas = info['has_pfas']
+        
+        test_names = [TEST_PARAMETERS[t]['name'] for t in tests]
+        st.markdown(f"**Order Type:** Custom Order")
+        st.markdown(f"**Tests:** {', '.join(test_names)}")
+        st.markdown(f"**Bottles:** {info['bottles']}")
+        st.markdown(f"**Packages:** {packages}")
+        if info['sharing']:
+            st.markdown("**Bottle Sharing:** Yes (Gen Chem + Anions)")
+    
+    st.markdown(f"**PFAS Included:** {'Yes ⚠️' if has_pfas else 'No'}")
+    st.markdown(f"**Shipping:** {'Compliance (2-Day)' if st.session_state.compliance else 'Standard Ground'}")
+    
+    ship_cost = estimate_shipping(st.session_state.compliance, packages)
+    total = base_price + ship_cost
+    
+    st.markdown(f"""
+    <div class="price-display" style="margin-top: 1.5rem;">
+        <div class="price-label">Total Price</div>
+        <div class="price-amount">${total:.2f}</div>
+        <div class="price-sub">Base: ${base_price:.2f} + Shipping: ${ship_cost:.2f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Confirmation
+    st.markdown('<div class="card"><div class="card-header">Confirm & Generate Pick List</div>', unsafe_allow_html=True)
+    
+    st.markdown("Please review the order details above. Click **Confirm & Generate** to create the pick list.")
+    
+    confirmed = st.checkbox("I confirm this order is correct", key="confirm_order")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Navigation
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.button("← Back", key="back_3", use_container_width=True):
+            go_back()
+            st.rerun()
+    with col3:
+        if confirmed:
+            if st.button("Confirm & Generate →", key="next_3", type="primary", use_container_width=True):
+                # Generate order number
+                st.session_state.order_number = generate_order_number()
+                
+                # Generate pick list
+                if st.session_state.order_mode == 'bundle':
+                    st.session_state.pick_list = create_bundle_picklist(
+                        st.session_state.selected_bundle,
+                        st.session_state.order_number
+                    )
+                else:
+                    tests = [k for k, v in st.session_state.selected_tests.items() if v]
+                    info = calc_custom_order(tests)
+                    st.session_state.pick_list = create_custom_picklist(
+                        tests, info, st.session_state.order_number
+                    )
+                
+                go_next()
+                st.rerun()
+        else:
+            st.button("Confirm & Generate →", key="next_3_disabled", disabled=True, use_container_width=True)
 
 
 # =============================================================================
 # STEP 4: PICK LIST
 # =============================================================================
 
-st.header("4️⃣ Generate Pick List")
-
-if has_order:
-    if st.button("📋 Generate Pick List", type="primary", key="gen_pick"):
-        if st.session_state.order_mode == 'bundle':
-            st.session_state.pick_list = create_bundle_pick_list(st.session_state.selected_bundle)
-        else:
-            selected = [k for k, v in st.session_state.selected_tests.items() if v]
-            info = calculate_custom_order(selected)
-            st.session_state.pick_list = create_custom_pick_list(selected, info)
-        st.success("✅ Generated!")
+elif st.session_state.current_step == 4:
+    pl = st.session_state.pick_list
     
-    if st.session_state.pick_list:
-        pl = st.session_state.pick_list
-        text = format_pick_list_text(pl)
-        
-        st.markdown(f"<div class='pick-list-box'>{text}</div>", unsafe_allow_html=True)
-        
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            fname = pl.get('bundle_sku', 'CUSTOM')
+    # Success message
+    st.markdown(f"""
+    <div class="success-box">
+        <div class="success-icon">✅</div>
+        <div class="success-title">Pick List Generated Successfully!</div>
+        <div class="success-order">{pl['order_number']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("")
+    
+    # Pick List Display
+    st.markdown('<div class="card"><div class="card-header">Pick List</div>', unsafe_allow_html=True)
+    
+    text = format_professional_picklist(pl)
+    st.markdown(f'<div class="picklist-box">{text}</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Downloads
+    st.markdown('<div class="card"><div class="card-header">Download</div>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.download_button(
+            "📥 Download TXT",
+            data=text,
+            file_name=f"{pl['order_number']}_PickList.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    
+    with col2:
+        pdf_bytes = generate_pdf(pl)
+        if pdf_bytes:
             st.download_button(
-                "📥 Download TXT",
-                data=text,
-                file_name=f"KELP_PickList_{fname}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                mime="text/plain",
-                key="dl_txt"
+                "📄 Download PDF",
+                data=pdf_bytes,
+                file_name=f"{pl['order_number']}_PickList.pdf",
+                mime="application/pdf",
+                use_container_width=True
             )
-        
-        with c2:
-            oid = st.text_input("Order ID:", key="oid")
-            cust = st.text_input("Customer:", key="cust")
-            
-            if st.button("📄 Generate PDF", key="gen_pdf"):
-                pdf = generate_pdf(pl, oid, cust)
-                if pdf:
-                    st.download_button(
-                        "⬇️ Download PDF",
-                        data=pdf,
-                        file_name=f"KELP_PickList_{fname}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                        mime="application/pdf",
-                        key="dl_pdf"
-                    )
-                else:
-                    st.error("Install reportlab: `pip install reportlab`")
-else:
-    st.warning("⚠️ Make a selection first")
-
-st.divider()
-
-
-# =============================================================================
-# STEP 5: COMPLETE
-# =============================================================================
-
-st.header("5️⃣ Complete Order")
-
-if has_order and st.session_state.pick_list:
-    c1, c2 = st.columns(2)
+        else:
+            st.info("PDF requires reportlab: `pip install reportlab`")
     
-    with c1:
-        if st.button("💾 Save & Reset", type="primary", key="save"):
-            order = {
-                'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': st.session_state.order_mode,
-                'ref': st.session_state.selected_bundle or 'CUSTOM',
-                'packages': packages,
-                'total': total if 'total' in dir() else 0
-            }
-            st.session_state.order_history.append(order)
-            
-            for key in ['selected_bundle', 'selected_tests', 'shipping_rate', 'pick_list']:
-                st.session_state[key] = defaults.get(key, None)
-            
-            st.success("✅ Saved!")
-            st.balloons()
-            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    with c2:
-        if st.button("🔄 Reset", key="just_reset"):
-            for key in ['selected_bundle', 'selected_tests', 'shipping_rate', 'pick_list']:
-                st.session_state[key] = defaults.get(key, None)
+    # Navigation
+    st.markdown("")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🔄 Start New Order", key="new_order", type="primary", use_container_width=True):
+            reset_wizard()
             st.rerun()
-else:
-    st.info("💡 Generate pick list first")
-
-
-# =============================================================================
-# HISTORY
-# =============================================================================
-
-if st.session_state.order_history:
-    st.divider()
-    st.header("📊 Order History")
-    st.dataframe(pd.DataFrame(st.session_state.order_history))
 
 
 # =============================================================================
 # FOOTER
 # =============================================================================
 
-st.divider()
+st.markdown("")
+st.markdown("---")
 st.markdown("""
----
-**KELP Kit Builder Pro v7.0** | February 2026
-
-**Pre-Packed Kit SKUs:**
-| SKU | Description |
-|-----|-------------|
-| `1300-00001_REV01` | KIT KELP (Metals + Anion + Gen Chem) |
-| `1300-00003_REV01` | KIT KELP (PFAS) |
-
-**Bundle → Kit Mapping:**
-| Bundle | Standard Kit | PFAS Kit | Total |
-|--------|--------------|----------|-------|
-| COM-001, COM-002, RE-001, RE-002, RES-001, RES-002 | 1 | - | 1 |
-| RES-003, RES-004, RES-005, RES-006 | 1 | 1 | 2 |
----
-""")
+<div style="text-align: center; color: #999; font-size: 0.85rem;">
+    KELP Kit Builder Pro v8.0 | Enterprise Edition | © 2026 KELP Laboratory Services
+</div>
+""", unsafe_allow_html=True)

@@ -325,263 +325,319 @@ def create_custom_picklist(tests: List[str], info: Dict, order_num: str) -> Dict
 
 def format_professional_picklist(pl: Dict) -> str:
     """Generate professional formatted pick list"""
+    W = 78  # Total width
+    IW = W - 4  # Inner width (minus borders and padding)
+    
     lines = []
     
+    # Helper to create bordered line
+    def bordered(text, pad=2):
+        return "│" + " " * pad + text.ljust(W - 2 - pad) + "│"
+    
+    def separator(char="─", left="├", right="┤"):
+        return left + char * (W - 2) + right
+    
     # Header
-    lines.append("┌" + "─" * 68 + "┐")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("│" + "KELP LABORATORY SERVICES".center(68) + "│")
-    lines.append("│" + "Kit Assembly Pick List".center(68) + "│")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("├" + "─" * 68 + "┤")
+    lines.append("┌" + "─" * (W - 2) + "┐")
+    lines.append(bordered(""))
+    lines.append(bordered("KELP LABORATORY SERVICES".center(IW)))
+    lines.append(bordered("Kit Assembly Pick List".center(IW)))
+    lines.append(bordered(""))
+    lines.append(separator())
     
     # Order Info
-    lines.append("│" + " " * 68 + "│")
-    lines.append("│  " + f"Order Number: {pl['order_number']}".ljust(66) + "│")
-    lines.append("│  " + f"Generated: {pl['timestamp']}".ljust(66) + "│")
-    lines.append("│  " + f"Order Type: {pl['type']}".ljust(66) + "│")
+    lines.append(bordered(""))
+    lines.append(bordered(f"Order Number:  {pl['order_number']}"))
+    lines.append(bordered(f"Generated:     {pl['timestamp']}"))
+    lines.append(bordered(f"Order Type:    {pl['type']}"))
     
     if pl['type'] == 'BUNDLE':
-        lines.append("│" + " " * 68 + "│")
-        lines.append("│  " + f"Bundle: {pl['bundle_sku']} - {pl['bundle_name']}".ljust(66) + "│")
-        lines.append("│  " + f"Category: {pl['bundle_type']}".ljust(66) + "│")
-        lines.append("│  " + f"Total Kits: {pl['total_kits']}".ljust(66) + "│")
+        lines.append(bordered(""))
+        # Truncate long bundle names
+        bundle_name = pl['bundle_name'][:40] + "..." if len(pl['bundle_name']) > 40 else pl['bundle_name']
+        lines.append(bordered(f"Bundle:        {pl['bundle_sku']} - {bundle_name}"))
+        lines.append(bordered(f"Category:      {pl['bundle_type']}"))
+        lines.append(bordered(f"Total Kits:    {pl['total_kits']}"))
     else:
-        lines.append("│" + " " * 68 + "│")
-        lines.append("│  " + f"Tests: {', '.join(pl['tests'])}".ljust(66) + "│")
-        lines.append("│  " + f"Bottles: {pl['bottles']} | Packages: {pl['packages']}".ljust(66) + "│")
+        lines.append(bordered(""))
+        tests_str = ', '.join(pl['tests'])
+        if len(tests_str) > 55:
+            tests_str = tests_str[:52] + "..."
+        lines.append(bordered(f"Tests:         {tests_str}"))
+        lines.append(bordered(f"Bottles:       {pl['bottles']}"))
+        lines.append(bordered(f"Packages:      {pl['packages']}"))
         if pl['sharing']:
-            lines.append("│  " + "Bottle Sharing: Yes (Gen Chem + Anions)".ljust(66) + "│")
-        lines.append("│  " + f"Est. Assembly: {pl['assembly_time']} minutes".ljust(66) + "│")
+            lines.append(bordered("Sharing:       Yes (Gen Chem + Anions)"))
+        lines.append(bordered(f"Assembly Time: {pl['assembly_time']} minutes"))
     
     pfas_status = "YES ⚠" if pl['has_pfas'] else "No"
-    lines.append("│  " + f"PFAS Included: {pfas_status}".ljust(66) + "│")
-    lines.append("│" + " " * 68 + "│")
+    lines.append(bordered(f"PFAS:          {pfas_status}"))
+    lines.append(bordered(""))
     
-    # Pick List Header
-    lines.append("├" + "─" * 68 + "┤")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("│  " + "PICK LIST ITEMS".ljust(66) + "│")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("│  " + "─" * 64 + "  │")
-    lines.append("│  " + f"{'☐':<3}{'Part Number':<22}{'Description':<32}{'Qty':>7}" + "  │")
-    lines.append("│  " + "─" * 64 + "  │")
+    # Pick List Section
+    lines.append(separator())
+    lines.append(bordered(""))
+    lines.append(bordered("PICK LIST ITEMS"))
+    lines.append(bordered(""))
+    
+    # Table header
+    hdr = f"{'':2}{'Part Number':<20}  {'Description':<40}  {'Qty':>5}"
+    lines.append(bordered(hdr))
+    lines.append(bordered("─" * IW))
     
     # Items
     for item in pl['items']:
-        line = f"{'☐':<3}{item['part']:<22}{item['desc']:<32}{item['qty']:>7}"
-        lines.append("│  " + line + "  │")
+        desc = item['desc'][:38] + ".." if len(item['desc']) > 40 else item['desc']
+        row = f"☐ {item['part']:<20}  {desc:<40}  {item['qty']:>5}"
+        lines.append(bordered(row))
     
-    lines.append("│  " + "─" * 64 + "  │")
-    lines.append("│" + " " * 68 + "│")
+    lines.append(bordered("─" * IW))
+    lines.append(bordered(""))
     
-    # Special Instructions
+    # Instructions
+    lines.append(bordered("INSTRUCTIONS:"))
     if pl['type'] == 'BUNDLE':
-        lines.append("│  " + "INSTRUCTIONS:".ljust(66) + "│")
-        lines.append("│  " + "• Pre-packed bundle - no individual component picking required".ljust(66) + "│")
+        lines.append(bordered("  • Pre-packed bundle - no individual picking required"))
         if pl['has_pfas']:
-            lines.append("│  " + "• ⚠ PFAS kit included - use PFAS-free gloves when handling".ljust(66) + "│")
+            lines.append(bordered("  • ⚠ PFAS kit included - use PFAS-free gloves"))
     else:
-        lines.append("│  " + "INSTRUCTIONS:".ljust(66) + "│")
-        lines.append("│  " + "• Assemble components as listed above".ljust(66) + "│")
+        lines.append(bordered("  • Assemble all components as listed above"))
         if pl['packages'] > 1:
-            lines.append("│  " + f"• Split into {pl['packages']} packages (max 2 bottles per box)".ljust(66) + "│")
+            lines.append(bordered(f"  • Split into {pl['packages']} packages (max 2 bottles/box)"))
         if pl['has_pfas']:
-            lines.append("│  " + "• ⚠ PFAS order - use PFAS-free gloves and PFAS packaging ONLY".ljust(66) + "│")
-        if pl['sharing']:
-            lines.append("│  " + "• Gen Chem & Anions share bottle 1300-00007".ljust(66) + "│")
+            lines.append(bordered("  • ⚠ PFAS order - PFAS-free gloves & packaging only"))
+        if pl.get('sharing'):
+            lines.append(bordered("  • Gen Chem & Anions share bottle 1300-00007"))
     
-    lines.append("│" + " " * 68 + "│")
+    lines.append(bordered(""))
     
-    # Signatures
-    lines.append("├" + "─" * 68 + "┤")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("│  " + "VERIFICATION".ljust(66) + "│")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("│  " + "Assembled By: ________________________  Date: ______________".ljust(66) + "│")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("│  " + "Verified By:  ________________________  Date: ______________".ljust(66) + "│")
-    lines.append("│" + " " * 68 + "│")
-    lines.append("└" + "─" * 68 + "┘")
+    # Verification
+    lines.append(separator())
+    lines.append(bordered(""))
+    lines.append(bordered("VERIFICATION"))
+    lines.append(bordered(""))
+    lines.append(bordered("Assembled By: _____________________________   Date: ________________"))
+    lines.append(bordered(""))
+    lines.append(bordered("Verified By:  _____________________________   Date: ________________"))
+    lines.append(bordered(""))
+    lines.append("└" + "─" * (W - 2) + "┘")
     
     return "\n".join(lines)
 
 
 def generate_pdf(pl: Dict) -> Optional[bytes]:
-    """Generate professional PDF pick list"""
+    """Generate professional PDF pick list using fpdf2"""
     try:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from fpdf import FPDF
+        from fpdf.enums import XPos, YPos
     except ImportError:
         return None
     
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.75*inch, bottomMargin=0.75*inch,
-                           leftMargin=0.75*inch, rightMargin=0.75*inch)
-    
-    styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=24, 
-                                  spaceAfter=4, alignment=TA_CENTER, 
-                                  textColor=colors.HexColor('#003366'))
-    
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=14, 
-                                     spaceAfter=20, alignment=TA_CENTER,
-                                     textColor=colors.HexColor('#666666'))
-    
-    section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=12,
-                                    spaceBefore=16, spaceAfter=8, 
-                                    textColor=colors.HexColor('#003366'),
-                                    borderPadding=4)
-    
-    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10,
-                                   spaceAfter=4)
-    
-    elements = []
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
     
     # Header
-    elements.append(Paragraph("KELP LABORATORY SERVICES", title_style))
-    elements.append(Paragraph("Kit Assembly Pick List", subtitle_style))
+    pdf.set_font('Helvetica', 'B', 22)
+    pdf.set_text_color(0, 51, 102)
+    pdf.cell(0, 12, 'KELP LABORATORY SERVICES', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_font('Helvetica', '', 14)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 8, 'Kit Assembly Pick List', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.ln(5)
     
-    # Divider
-    elements.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#003366')))
-    elements.append(Spacer(1, 0.2*inch))
+    # Header line
+    pdf.set_draw_color(0, 51, 102)
+    pdf.set_line_width(0.8)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
     
     # Order Info Box
-    order_info = [
-        [Paragraph(f"<b>Order Number:</b> {pl['order_number']}", normal_style),
-         Paragraph(f"<b>Generated:</b> {pl['timestamp']}", normal_style)],
-        [Paragraph(f"<b>Order Type:</b> {pl['type']}", normal_style),
-         Paragraph(f"<b>PFAS Included:</b> {'YES ⚠️' if pl['has_pfas'] else 'No'}", normal_style)]
-    ]
+    pdf.set_fill_color(245, 248, 250)
+    pdf.set_draw_color(0, 51, 102)
+    box_height = 48 if pl['type'] == 'BUNDLE' else 55
+    pdf.rect(10, pdf.get_y(), 190, box_height, style='DF')
+    
+    y_start = pdf.get_y() + 6
+    pdf.set_xy(15, y_start)
+    
+    # Row 1
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(35, 7, 'Order Number:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.cell(55, 7, pl['order_number'], new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(25, 7, 'Generated:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.cell(0, 7, pl['timestamp'], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    # Row 2
+    pdf.set_x(15)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(35, 7, 'Order Type:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.cell(55, 7, pl['type'], new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(25, 7, 'PFAS:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font('Helvetica', '', 10)
+    pfas_text = 'YES - Special Handling' if pl['has_pfas'] else 'No'
+    pdf.cell(0, 7, pfas_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     if pl['type'] == 'BUNDLE':
-        order_info.append([
-            Paragraph(f"<b>Bundle:</b> {pl['bundle_sku']}", normal_style),
-            Paragraph(f"<b>Name:</b> {pl['bundle_name']}", normal_style)
-        ])
-        order_info.append([
-            Paragraph(f"<b>Category:</b> {pl['bundle_type']}", normal_style),
-            Paragraph(f"<b>Total Kits:</b> {pl['total_kits']}", normal_style)
-        ])
+        # Row 3 - Bundle info
+        pdf.set_x(15)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(35, 7, 'Bundle:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        bundle_text = f"{pl['bundle_sku']} - {pl['bundle_name']}"
+        if len(bundle_text) > 70:
+            bundle_text = bundle_text[:67] + '...'
+        pdf.cell(0, 7, bundle_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        # Row 4
+        pdf.set_x(15)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(35, 7, 'Category:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(55, 7, pl['bundle_type'], new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(25, 7, 'Total Kits:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 7, str(pl['total_kits']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
-        order_info.append([
-            Paragraph(f"<b>Tests:</b> {', '.join(pl['tests'])}", normal_style),
-            Paragraph(f"<b>Assembly Time:</b> {pl['assembly_time']} min", normal_style)
-        ])
-        order_info.append([
-            Paragraph(f"<b>Bottles:</b> {pl['bottles']}", normal_style),
-            Paragraph(f"<b>Packages:</b> {pl['packages']}", normal_style)
-        ])
+        # Row 3 - Tests
+        pdf.set_x(15)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(35, 7, 'Tests:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        tests_str = ', '.join(pl['tests'])
+        if len(tests_str) > 75:
+            tests_str = tests_str[:72] + '...'
+        pdf.cell(0, 7, tests_str, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        # Row 4
+        pdf.set_x(15)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(35, 7, 'Bottles:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(55, 7, str(pl['bottles']), new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(25, 7, 'Packages:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 7, str(pl['packages']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        # Row 5
+        pdf.set_x(15)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(35, 7, 'Assembly:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 7, f"{pl['assembly_time']} minutes", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
-    info_table = Table(order_info, colWidths=[3.5*inch, 3.5*inch])
-    info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F5F8FA')),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#003366')),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 12),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
-    ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 0.3*inch))
+    pdf.ln(box_height - (pdf.get_y() - y_start) + 8)
     
     # Pick List Section
-    elements.append(Paragraph("Pick List Items", section_style))
+    pdf.set_font('Helvetica', 'B', 13)
+    pdf.set_text_color(0, 51, 102)
+    pdf.cell(0, 10, 'PICK LIST ITEMS', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(2)
     
     # Table Header
-    tbl_data = [[
-        Paragraph("<b>✓</b>", normal_style),
-        Paragraph("<b>Part Number</b>", normal_style),
-        Paragraph("<b>Description</b>", normal_style),
-        Paragraph("<b>Qty</b>", normal_style)
-    ]]
+    pdf.set_fill_color(0, 51, 102)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(12, 10, '', fill=True, border=1)
+    pdf.cell(48, 10, 'Part Number', fill=True, border=1)
+    pdf.cell(112, 10, 'Description', fill=True, border=1)
+    pdf.cell(18, 10, 'Qty', fill=True, border=1, align='C')
+    pdf.ln()
     
     # Table Rows
-    for item in pl['items']:
-        tbl_data.append([
-            "☐",
-            item['part'],
-            item['desc'],
-            str(item['qty'])
-        ])
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('Helvetica', '', 10)
     
-    pick_table = Table(tbl_data, colWidths=[0.4*inch, 1.8*inch, 4.0*inch, 0.6*inch])
-    pick_table.setStyle(TableStyle([
-        # Header
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#003366')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
+    row_fill = False
+    for item in pl['items']:
+        if row_fill:
+            pdf.set_fill_color(248, 248, 248)
+        else:
+            pdf.set_fill_color(255, 255, 255)
         
-        # Body
-        ('FONTSIZE', (0, 1), (-1, -1), 10),
-        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-        ('ALIGN', (3, 0), (3, -1), 'CENTER'),
+        desc = item['desc']
+        if len(desc) > 55:
+            desc = desc[:52] + '...'
         
-        # Grid
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-        ('BOX', (0, 0), (-1, -1), 1.5, colors.HexColor('#003366')),
-        
-        # Padding
-        ('TOPPADDING', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        
-        # Alternating rows
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9F9F9')]),
-    ]))
-    elements.append(pick_table)
-    elements.append(Spacer(1, 0.3*inch))
+        pdf.cell(12, 10, '[ ]', fill=True, border=1, align='C')
+        pdf.cell(48, 10, item['part'], fill=True, border=1)
+        pdf.cell(112, 10, desc, fill=True, border=1)
+        pdf.cell(18, 10, str(item['qty']), fill=True, border=1, align='C')
+        pdf.ln()
+        row_fill = not row_fill
+    
+    pdf.ln(8)
     
     # Instructions
-    elements.append(Paragraph("Special Instructions", section_style))
+    pdf.set_font('Helvetica', 'B', 13)
+    pdf.set_text_color(0, 51, 102)
+    pdf.cell(0, 10, 'SPECIAL INSTRUCTIONS', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(2)
+    
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_text_color(0, 0, 0)
     
     if pl['type'] == 'BUNDLE':
-        elements.append(Paragraph("• Pre-packed bundle order - no individual component picking required", normal_style))
+        pdf.cell(0, 6, '  * Pre-packed bundle - no individual component picking required', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         if pl['has_pfas']:
-            elements.append(Paragraph("• <b>⚠️ PFAS kit included</b> - Handle with PFAS-free gloves", normal_style))
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.set_text_color(180, 0, 0)
+            pdf.cell(0, 6, '  * WARNING: PFAS kit included - Handle with PFAS-free gloves', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
-        elements.append(Paragraph("• Assemble all components as listed in the pick list above", normal_style))
+        pdf.cell(0, 6, '  * Assemble all components as listed above', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         if pl['packages'] > 1:
-            elements.append(Paragraph(f"• <b>Multiple packages:</b> Split into {pl['packages']} boxes (max 2 bottles per box)", normal_style))
+            pdf.cell(0, 6, f"  * Split into {pl['packages']} packages (max 2 bottles per box)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         if pl['has_pfas']:
-            elements.append(Paragraph("• <b>⚠️ PFAS order:</b> Use PFAS-free gloves and PFAS packaging ONLY", normal_style))
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.set_text_color(180, 0, 0)
+            pdf.cell(0, 6, '  * WARNING: PFAS order - Use PFAS-free gloves and packaging ONLY', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         if pl.get('sharing'):
-            elements.append(Paragraph("• <b>Bottle sharing:</b> General Chemistry & Anions share bottle 1300-00007", normal_style))
+            pdf.set_font('Helvetica', '', 10)
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(0, 6, '  * Bottle sharing: Gen Chem & Anions share bottle 1300-00007', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
-    elements.append(Spacer(1, 0.4*inch))
+    pdf.ln(12)
     
-    # Signature Section
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#CCCCCC')))
-    elements.append(Spacer(1, 0.2*inch))
-    elements.append(Paragraph("Verification", section_style))
+    # Verification Section
+    pdf.set_draw_color(180, 180, 180)
+    pdf.set_line_width(0.3)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(8)
     
-    sig_data = [
-        ["Assembled By:", "_" * 35, "Date:", "_" * 15],
-        ["", "", "", ""],
-        ["Verified By:", "_" * 35, "Date:", "_" * 15],
-    ]
+    pdf.set_font('Helvetica', 'B', 13)
+    pdf.set_text_color(0, 51, 102)
+    pdf.cell(0, 10, 'VERIFICATION', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(5)
     
-    sig_table = Table(sig_data, colWidths=[1*inch, 2.5*inch, 0.6*inch, 1.5*inch])
-    sig_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
-    ]))
-    elements.append(sig_table)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_text_color(0, 0, 0)
     
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
+    pdf.cell(28, 8, 'Assembled By:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.cell(75, 8, '_' * 45, new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.cell(12, 8, 'Date:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.cell(0, 8, '_' * 28, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(6)
+    
+    pdf.cell(28, 8, 'Verified By:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.cell(75, 8, '_' * 45, new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.cell(12, 8, 'Date:', new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.cell(0, 8, '_' * 28, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    # Footer
+    pdf.ln(15)
+    pdf.set_font('Helvetica', 'I', 8)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 5, 'KELP Laboratory Services | Sunnyvale, CA | Generated by Kit Builder Pro v8.0', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    
+    return bytes(pdf.output())
 
 
 # =============================================================================
@@ -729,13 +785,14 @@ st.markdown("""
         border: 1px solid #E0E0E0;
         border-radius: 8px;
         padding: 1rem;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        font-size: 12px;
-        line-height: 1.4;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 11px;
+        line-height: 1.5;
         white-space: pre;
         overflow-x: auto;
-        max-height: 500px;
         overflow-y: auto;
+        max-height: 600px;
+        min-width: 100%;
     }
     
     /* Navigation buttons */
@@ -1215,7 +1272,7 @@ elif st.session_state.current_step == 4:
                 use_container_width=True
             )
         else:
-            st.info("PDF requires reportlab: `pip install reportlab`")
+            st.error("PDF generation failed. Check requirements.txt includes 'fpdf2'")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
